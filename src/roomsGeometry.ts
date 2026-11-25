@@ -91,7 +91,7 @@ function chair(box:Place,x:number,z:number,y:number,id:string,yaw=0,visitor=fals
     box([x+dx*cos+dz*sin,y+dy,z-dx*sin+dz*cos],size,color,id,yaw+turn,shape)
   const fabric=visitor?'#789085':'#546b61'
   place(0,.43,0,[.48,.077,.49],C.rack)
-  place(0,.477,-.02,[.46,.065,.45],fabric)
+  place(0,.477,-.02,[.46,.065,.44],fabric)
   place(0,.715,.214,[.455,.37,.075],C.rack)
   place(0,.718,.172,[.412,.313,.042],fabric)
   for(const side of [-1,1]){
@@ -107,7 +107,7 @@ function chair(box:Place,x:number,z:number,y:number,id:string,yaw=0,visitor=fals
   place(0,.235,0,[.084,.326,.084],C.metal,0,'round')
   for(const spoke of [0,1.257,2.513,3.77,5.027]){
     const dx=Math.sin(spoke),dz=Math.cos(spoke)
-    place(dx*.112,.095,dz*.112,[.045,.04,.237],C.rack,spoke)
+    place(dx*.132,.095,dz*.132,[.045,.04,.197],C.rack,spoke)
     place(dx*.215,.049,dz*.215,[.073,.061,.073],C.rack,0,'round')
   }
 }
@@ -136,17 +136,17 @@ function desk(box:Place,obstacles:Collision[],x:number,z:number,y:number,id:stri
   monitor(place,0,y+.775,-.16,w*.55,id,noc?'#6ca79d':'#8ba1a4')
   chair(place,0,.79,y,id)
 }
-function bookcase(place:Place,y:number,w:number,h:number,id:string){
-  // Open-fronted carcass: back panel, sides and top, so the shelves and books stay visible.
-  place([0,y+h/2,-.165],[w,h,.03],'#6b543d',id)
-  for(const side of [-1,1]) place([side*(w/2-.015),y+h/2,0],[.03,h,.36],'#7b6248',id)
-  place([0,y+h-.015,0],[w,.03,.36],'#7b6248',id)
-  place([0,y+.04,.01],[w-.06,.08,.34],'#6b543d',id)
+function bookcase(place:Place,y:number,w:number,h:number,depth:number,id:string){
+  // Butt the boards together so their visible faces don't overlap.
+  const board=.03,insideDepth=depth-board,insideZ=board/2,insideWidth=w-2*board
+  place([0,y+h/2,-insideDepth/2],[w,h,board],'#6b543d',id)
+  for(const side of [-1,1]) place([side*(w-board)/2,y+(h-board)/2,insideZ],[board,h-board,insideDepth],'#7b6248',id)
+  place([0,y+h-board/2,insideZ],[w,board,insideDepth],'#7b6248',id)
+  place([0,y+.04,insideZ],[insideWidth,.08,insideDepth],'#6b543d',id)
   const shelves=Math.round(h/.38)
-  for(let i=0;i<shelves;i++){
+  for(let i=1;i<shelves;i++){
     const shelfY=y+.06+i*h/shelves
-    place([0,shelfY,.02],[w-.06,.025,.33],'#9b7d5a',id)
-    if(i===0) continue
+    place([0,shelfY,insideZ],[insideWidth,.025,insideDepth],'#9b7d5a',id)
     let at=-w/2+.08
     for(let book=0;at<w/2-.1;book++){
       const width=.035+(book*7%5)*.012,height=.2+(book*3%4)*.03
@@ -173,7 +173,7 @@ function directorOffice(box:Place,obstacles:Collision[],x:number,z:number,w:numb
   box([deskX+.62,top+.032,deskZ+.05],[.22,.01,.3],'#e9e4d4',id)
   box([deskX-.72,top+.01,deskZ-.18],[.13,.02,.13],C.metal,id,0,'round')
   box([deskX-.72,top+.2,deskZ-.18],[.016,.38,.016],C.metal,id)
-  box([deskX-.67,top+.38,deskZ-.18],[.11,.016,.016],C.metal,id)
+  box([deskX-.67,top+.38,deskZ-.18],[.11,.016,.024],C.metal,id)
   box([deskX-.6,top+.35,deskZ-.18],[.13,.07,.13],'#e8d8a8',id,0,'round','light')
   box([deskX-.3,top+.03,deskZ+.32],[.36,.06,.05],'#b59b6b',id,0,'box','solid',-.5)
   // High-back chair behind the desk, two visitor chairs facing it.
@@ -182,24 +182,26 @@ function directorOffice(box:Place,obstacles:Collision[],x:number,z:number,w:numb
   for(const dx of [-.45,.45]) chair(box,deskX+dx,deskZ+1.05,y,id,0,true)
   obstacles.push({x:deskX,z:deskZ+1.08,w:1.4,d:.5})
   // Credenza and bookcase along the back wall behind the director.
-  const credenza=turn(box,deskX,z+.3,0)
-  obstacles.push({x:deskX,z:z+.3,w:2.2,d:.44})
-  credenza([0,y+.36,0],[2.2,.7,.44],'#5e4636',id)
+  const credenzaDepth=.44,credenzaZ=z+(property.wall+credenzaDepth)/2+.02
+  const credenza=turn(box,deskX,credenzaZ,0)
+  obstacles.push({x:deskX,z:credenzaZ,w:2.2,d:credenzaDepth})
+  credenza([0,y+.36,0],[2.2,.7,credenzaDepth],'#5e4636',id)
   for(const dx of [-.55,0,.55]) credenza([dx,y+.36,.225],[.52,.62,.012],'#6f5441',id)
   for(const dx of [-.55,0,.55]) credenza([dx+.18,y+.4,.235],[.018,.12,.02],C.metal,id)
   credenza([-.7,y+.97,0],[.48,.5,.03],'#a9b8a6',id)
   credenza([-.7,y+.97,.02],[.42,.43,.01],'#6d8f7f',id)
   credenza([.6,y+.82,0],[.18,.24,.18],'#d7cdb8',id,0,'round')
-  const shelf=turn(box,x+w-.24,z+1.25,-Math.PI/2)
-  obstacles.push({x:x+w-.24,z:z+1.25,w:.4,d:1.5})
-  bookcase(shelf,y,1.45,2.05,id)
+  const shelfDepth=.36,shelfX=x+w-(property.wall+shelfDepth)/2-.02,shelfZ=z+1.25
+  const shelf=turn(box,shelfX,shelfZ,-Math.PI/2)
+  obstacles.push({x:shelfX,z:shelfZ,w:.4,d:1.5})
+  bookcase(shelf,y,1.45,2.05,shelfDepth,id)
   // Lounge corner: armchair, side table and plant clear of the door path.
   const lounge=turn(box,x+w-.55,z+d-.95,Math.PI/2)
   obstacles.push({x:x+w-.55,z:z+d-.95,w:.8,d:.8})
   lounge([0,y+.22,0],[.78,.3,.78],'#506a62',id)
-  lounge([0,y+.42,.06],[.66,.12,.62],'#6a857b',id)
-  lounge([0,y+.6,.33],[.78,.52,.16],'#506a62',id)
-  for(const side of [-1,1]) lounge([side*.33,y+.47,0],[.14,.3,.78],'#506a62',id)
+  lounge([0,y+.425,0],[.5,.11,.5],'#6a857b',id)
+  lounge([0,y+.615,.33],[.78,.49,.16],'#506a62',id)
+  for(const side of [-1,1]) lounge([side*.32,y+.495,-.07],[.14,.25,.64],'#506a62',id)
   box([x+w-.5,y+.27,z+2.4],[.42,.54,.42],'#5e4636',id,0,'round')
   obstacles.push({x:x+w-.5,z:z+2.4,w:.42,d:.42})
   box([x+.4,y+.22,z+d-.42],[.36,.44,.36],'#8a7462',id,0,'round')
@@ -215,9 +217,10 @@ function directorOffice(box:Place,obstacles:Collision[],x:number,z:number,w:numb
 function workspace(box:Place,obstacles:Collision[],x:number,z:number,w:number,d:number,y:number,id:string){
   for(const dx of [.9,2.6]) desk(box,obstacles,x+dx,z+.47,y,id)
   for(const dx of [2.6,4.3]) desk(box,obstacles,x+dx,z+d-.47,y,id,1.35,false,Math.PI)
-  const storage=turn(box,x+.29,z+d/2,Math.PI/2)
-  obstacles.push({x:x+.29,z:z+d/2,w:.46,d:1.1})
-  storage([0,y+.52,0],[1.1,1.04,.46],'#c7c3b4',id)
+  const storageDepth=.46,storageX=x+(property.wall+storageDepth)/2+.02,storageZ=z+d/2
+  const storage=turn(box,storageX,storageZ,Math.PI/2)
+  obstacles.push({x:storageX,z:storageZ,w:storageDepth,d:1.1})
+  storage([0,y+.52,0],[1.1,1.04,storageDepth],'#c7c3b4',id)
   for(const dx of [-.27,.27]) storage([dx,y+.52,.235],[.52,.98,.012],'#d8d4c5',id)
   for(const dx of [-.06,.06]) storage([dx,y+.75,.245],[.018,.12,.02],C.metal,id)
   box([x+.105,y+1.62,z+d/2],[.03,.9,1.6],C.white,id)
@@ -236,7 +239,7 @@ export function glazedDoor(box:Place,level:number,wallX:number,axis:number,width
   }
   box([wallX-.014,level+2.135,axis],[.19,.095,width+.032],C.door,id)
   box([wallX,level+.018,axis],[.34,.022,width-.08],C.metal,id)
-  box([panelX,level+.462,hinge],[opening,.853,.061],'#5f786d',id)
+  box([panelX,level+.462,hinge],[opening-.02,.853,.061],'#5f786d',id)
   box([panelX,level+1.47,hinge],[opening-.09,1.157,.054],'#a9c7c1',id,0,'box','glass')
   for(const edge of [wallX+.028,tip]) box([edge,level+1.06,hinge],[.053,2.04,.084],C.door,id)
   for(const y of [.042,.908,2.083]) box([panelX,level+y,hinge],[opening,.058,.086],C.door,id)
@@ -425,23 +428,23 @@ function workshop(box:Place,obstacles:Collision[],x:number,z:number,south:number
   }
   for(const y of [.22,.78]){
     place(benchX,y,cartZ,[.63,.07,.91],C.metal)
-    for(const side of [-1,1]) place(benchX+side*.292,y+.06,cartZ,[.039,.078,.91],'#81948b')
+    for(const side of [-1,1]) place(benchX+side*.292,y+.06,cartZ,[.039,.078,.88],'#81948b')
   }
   place(benchX-.06,.861,cartZ-.236,[.288,.101,.32],'#b59462')
   place(benchX-.06,.92,cartZ-.236,[.136,.036,.054],C.rack)
   place(benchX+.09,.89,cartZ+.217,[.23,.153,.31],'#668276')
   // Mark the loading bay at the side, clear of the aisle between the two doors.
-  const stagingZ=south-1.73
+  const stagingZ=south-1.73,stagingWidth=1.47,stagingDepth=1.195,stripe=.055
   for(const side of [-1,1]){
-    place(x+1.02,.024,stagingZ+side*.57,[1.47,.009,.055],'#b99b52')
-    place(x+1.02+side*.716,.024,stagingZ,[.055,.009,1.18],'#b99b52')
+    place(x+1.02,.024,stagingZ+side*(stagingDepth-stripe)/2,[stagingWidth,.009,stripe],'#b99b52')
+    place(x+1.02+side*(stagingWidth-stripe)/2,.024,stagingZ,[stripe,.009,stagingDepth-2*stripe],'#b99b52')
   }
   for(const dz of [-.36,0,.36]){
     place(x+1.02,.081,stagingZ+dz,[1.14,.085,.103],'#906d4d')
   }
   for(let i=0;i<5;i++) place(x+.59+i*.215,.145,stagingZ,[.174,.047,.9],'#c0a579')
   place(x+1.02,.412,stagingZ,[.85,.49,.69],'#a39b81')
-  place(x+1.02,.665,stagingZ,[.084,.019,.69],'#545e54')
+  place(x+1.02,.665,stagingZ,[.084,.019,.68],'#545e54')
   obstacles.push({x:x+1.02,z:stagingZ,w:1.14,d:.9})
   for(let i=0;i<6;i++) place(loadingDoor.opening[0],.024,south-2.05+i*.27,[.22,.019,.15],'#80a897')
 }
@@ -621,14 +624,15 @@ export function interior(floor:'ground'|'upper',cap:Capacity,visibleIds?:Readonl
       for(const dx of [w*.27,w*.73]){
         box([x+dx,level+.879,z+.49],[.48,.045,.337],C.white,room.id,0,'sphere')
         box([x+dx,level+.898,z+.51],[.34,.021,.21],'#bbc7bd',room.id,0,'sphere')
-        box([x+dx,level+.965,z+.31],[.052,.18,.052],C.metal,room.id)
+        box([x+dx,level+.965,z+.31],[.06,.18,.06],C.metal,room.id)
         box([x+dx,level+1.038,z+.355],[.052,.04,.12],C.metal,room.id)
         box([x+dx,level+1.44,z+.115],[.66,.67,.037],'#9fbbb5',room.id)
       }
       box([x+.62,level+.405,z+2.64],[.4,.76,.158],C.white,room.id)
       box([x+.62,level+.272,z+2.39],[.39,.42,.53],C.white,room.id,0,'sphere')
       box([x+.62,level+.475,z+2.39],[.42,.052,.55],C.white,room.id,0,'sphere')
-      box([x+1.13,level+.95,z+2.28],[.079,1.9,1.13],'#a8b8ab',room.id)
+      const dividerDepth=1.13,dividerZ=z+d-(property.wall+dividerDepth)/2-.02
+      box([x+1.13,level+.95,dividerZ],[.079,1.9,dividerDepth],'#a8b8ab',room.id)
     }
   }
   if(floor==='ground'){

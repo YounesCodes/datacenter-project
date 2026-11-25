@@ -8,7 +8,7 @@ const openingAngle=Math.PI/2
 function garage(width:number,frame:Place,red:Place,green:Place){
   const half=width/2,height=loadingDoor.height
   frame([0,slab+height+.055,.135],[width*2+.22,.125,.17],C.metal)
-  frame([0,slab+.006,.04],[width*2+.06,.012,.24],'#83978c')
+  frame([0,slab+.008,.04],[width*2+.06,.016,.24],'#83978c')
   for(const side of [-1,1]){
     frame([side*(half+.042),slab+height/2,.08],[.095,height,.23],C.metal)
     frame([side*(width+.045),slab+height/2,.105],[.102,height,.16],C.metal)
