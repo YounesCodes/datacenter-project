@@ -1,6 +1,6 @@
 # Projet de centre de données à Benguerir
 
-Maquette 3D et outil de présentation en français. Le navigateur affiche le bâtiment, ses équipements, cinq simulations et un modèle d’énergie et de coûts. L’application fonctionne sans compte ni serveur applicatif.
+Maquette 3D et outil de présentation en français. Le navigateur affiche le bâtiment, ses équipements, les parcours techniques et cinq simulations. L’application fonctionne sans compte ni serveur applicatif.
 
 Le repère **32.25065, −7.93090** correspond à l’emplacement probable déduit de l’annonce et de l’imagerie. Les **limites parcellaires restent non vérifiées**. La parcelle de la maquette sert à étudier un aménagement de 2 465 m². Les quantités, prix, flux et événements sont des hypothèses de projet. Le dossier de recherche indique les sources et les validations en attente. [Recherche](research/README.md) · [Localisation](research/localisation-parcelle.md)
 

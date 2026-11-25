@@ -4,9 +4,6 @@
   .main-nav{gap:13px}
   .workspace{grid-template-columns:155px minmax(0,1fr) 243px}
   .inspector-content{padding:13px}
-  .metric{padding:8px}
-  .metric-label{font-size:9px}
-  .metric strong{font-size:19px}
   .layer-title{display:none}
 }
 @media(max-width:910px){
@@ -19,10 +16,7 @@
   .scene-column{min-height:510px}
   .inspector{grid-column:2;border-left:0;border-top:1px solid var(--line)}
   .inspector-content{overflow:visible}
-  .summary-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
   .layer-title{display:flex}
-  .metrics-grid.wide{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .phase-cards{gap:8px}
 }
 @media(max-width:610px){
   .topbar-inner,.app-main{padding-left:12px;padding-right:12px}
@@ -53,17 +47,8 @@
   .layer-title{display:none}
   .inspector{order:3}
   .inspector-bar{height:35px}
-  .summary-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
   .footer{flex-wrap:wrap;font-size:9px;padding:9px 0}
   .footer>a{order:3;flex-basis:100%}
-  .dashboard-heading{flex-direction:column;padding:12px;gap:8px}
-  .surface{padding:12px}
-  .phase-cards{grid-template-columns:1fr}
-  .phase-card{grid-template-columns:repeat(2,1fr);padding:10px;gap:5px;font-size:11px}
-  .phase-card .eyebrow,.phase-card h3,.phase-bar{grid-column:1/-1}
-  .phase-card h3{font-size:17px}
-  .metrics-grid.wide{gap:7px}
-  .metrics-grid.wide .metric{padding:8px}
 }
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;scroll-behavior:auto!important;transition-duration:.01ms!important}

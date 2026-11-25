@@ -1,5 +1,5 @@
-import { lazy,Suspense,useEffect,useMemo,useRef,useState,type CSSProperties } from 'react'
-import { ArrowRight, CircleHelp, Coins, Compass, Map, MapPin, Sun, TrendingUp, X } from 'lucide-react'
+import { useEffect,useMemo,useRef,useState,type CSSProperties } from 'react'
+import { ArrowRight, CircleHelp, Compass, Map, MapPin, X } from 'lucide-react'
 import { capacity,defaults,energy,solarProfile } from './engineering'
 import { BoardTools,Stage,type BoardMenu,type Tool } from './Explorer'
 import Inspector,{ nameFor,RouteSample,SimulationPanel } from './Inspector'
@@ -8,17 +8,10 @@ import { flowFocus,routeStyle } from './flowPresentation'
 import type { CameraAction,Scale } from './viewState'
 import { simulations } from './simulations'
 
-const CostsPanel=lazy(()=>import('./Dashboards').then(module=>({default:module.CostsPanel})))
-const EnergyPanel=lazy(()=>import('./Dashboards').then(module=>({default:module.EnergyPanel})))
-const ExpansionPanel=lazy(()=>import('./Dashboards').then(module=>({default:module.ExpansionPanel})))
-const dataPages={energy:'Énergie',costs:'Coûts',expansion:'Extension'} as const
-const dataIcons={energy:Sun,costs:Coins,expansion:TrendingUp}
 const layerAnchor:Record<Layer,string>={power:'switchgear',air:'crac',network:'fiber',compute:'hall-a',storage:'hall-b',solar:'solar'}
-type Sheet=keyof typeof dataPages
 type SimulationStep={id:string;step:number;sequence:number}
 
 export default function App(){
-  const [sheet,setSheet]=useState<Sheet|null>(null)
   const [menu,setMenu]=useState<BoardMenu>(null)
   const [phase,setPhase]=useState<Phase>(1)
   const [scale,setScale]=useState<Scale>('site')
@@ -47,16 +40,11 @@ export default function App(){
     if(next===phase) return
     setPhase(next)
   }
-  function openData(destination:Sheet){
-    setWalk(false)
-    setMenu(null)
-    setSheet(destination)
-  }
   function reset(level:Floor=floor){
     setTarget(null);setIsolated(false);setFloor(level);camera('reset')
   }
   function goScale(next:Scale){
-    setScale(next);setWalk(false);setSheet(null);setMenu(null)
+    setScale(next);setWalk(false);setMenu(null)
   }
   function chooseFloor(next:Floor){
     setSimulationStep(null);setWalk(false);setScale('site')
@@ -83,7 +71,7 @@ export default function App(){
     select(id)
   }
   function chooseLayer(next:Layer|null){
-    setSimulationStep(null);setSheet(null);setWalk(false);setScale('site');setLayer(next)
+    setSimulationStep(null);setWalk(false);setScale('site');setLayer(next)
     if(!next) return
     const level=next==='solar'?'roof':'ground'
     if(level!==floor||target) reset(level)
@@ -92,7 +80,7 @@ export default function App(){
     const sim=simulations.find(item=>item.id===id)
     const event=sim?.frames[index]
     if(!sim||!event) return
-    setScale('site');setSheet(null);setWalk(false);setLayer(sim.view)
+    setScale('site');setWalk(false);setLayer(sim.view)
     setTarget(null);setIsolated(false);setFloor('ground')
     setSimulationStep({id,step:index,sequence:++sequence.current})
     camera('simulation',index===0?'overview':event.frameEquipment?'equipment':undefined)
@@ -142,8 +130,7 @@ export default function App(){
       document.removeEventListener('keydown',escape)
     }
   },[menu])
-  const dashboardProps={phase,inputs,cap}
-  const showTimeline=scale==='site'&&Boolean(simulationStep&&frame)&&!sheet
+  const showTimeline=scale==='site'&&Boolean(simulationStep&&frame)
   const eventAnchor=frame&&currentSim?(frame.focus??layerAnchor[currentSim.view]):null
   const sceneHour=12
   const frameRoutes=frame?.routes??null
@@ -166,16 +153,9 @@ export default function App(){
       <div className="board-title"><div className="location"><MapPin size={13}/> BENGUERIR · MAROC</div><h1>Projet de centre de données</h1></div>
       <nav className="board-actions" aria-label="Navigation principale">
         <button className="soft-button" aria-pressed={scale==='city'} onClick={()=>goScale(scale==='city'?'site':'city')} title={scale==='city'?'Fermer la carte':'Carte de Benguerir'}><Map size={16}/><span>{scale==='city'?'Fermer la carte':'Carte de Benguerir'}</span></button>
-        <div className="data-switch" role="group" aria-label="Données">
-          {(Object.keys(dataPages) as Sheet[]).map(key=>{
-            const Icon=dataIcons[key]
-            return <button key={key} aria-label={dataPages[key]} aria-pressed={sheet===key} title={sheet===key?'Fermer '+dataPages[key].toLowerCase():dataPages[key]}
-              onClick={()=>sheet===key?setSheet(null):openData(key)}><Icon size={14} aria-hidden="true"/><span className="data-label">{dataPages[key]}</span></button>
-          })}
-        </div>
       </nav>
     </header>
-    {scale==='site'&&!sheet&&!walk&&<BoardTools tool={tool} floor={floor} phase={phase} layer={layer} simulation={simulationStep?.id??null} menu={menu} onMenu={setMenu} onTool={setTool} onFloor={chooseFloor}
+    {scale==='site'&&!walk&&<BoardTools tool={tool} floor={floor} phase={phase} layer={layer} simulation={simulationStep?.id??null} menu={menu} onMenu={setMenu} onTool={setTool} onFloor={chooseFloor}
       onPhase={next=>{setSimulationStep(null);choosePhase(next)}} onLayer={chooseLayer} onSimulation={startSimulation}/>}
   </>
   const info=showTimeline&&frame&&eventAnchor?
@@ -191,23 +171,15 @@ export default function App(){
           </div>}
         </div>
       </div>
-    </aside>:scale==='site'&&!sheet&&(target||layer)?
+    </aside>:scale==='site'&&(target||layer)?
       <Inspector target={target} phase={phase} cap={cap} inputs={inputs} layer={layer} routes={activeRoutes}
         isolated={isolated} onIsolate={()=>setIsolated(!isolated)} onClear={()=>chooseLayer(null)} onSimulate={startSimulation}
         legend={{hover:legendHover,pinned:legendPin,onHover:setLegendHover,onPin:setLegendPin}}/>:null
-  const dataSheet=sheet&&<section className="board-sheet" data-sheet={sheet} aria-label={dataPages[sheet]}>
-    <div className="sheet-header"><button className="icon-button sheet-close" onClick={()=>setSheet(null)} aria-label="Fermer les données"><X size={19}/></button></div>
-    <Suspense fallback={<p className="dashboard-loading" role="status">Ouverture du tableau…</p>}>
-      {sheet==='energy'&&<EnergyPanel {...dashboardProps} onScene={()=>chooseLayer('solar')}/>}
-      {sheet==='costs'&&<CostsPanel {...dashboardProps}/>}
-      {sheet==='expansion'&&<ExpansionPanel {...dashboardProps}/>}
-    </Suspense>
-  </section>
   return <>
     <a href="#main-content" className="skip-link">Aller au contenu</a>
     <main className="board-app" id="main-content" aria-label="Visite de la maquette">
       <Stage cap={cap} inputs={inputs} phase={phase} scale={scale} floor={floor} target={target} layer={layer} action={command}
-        header={header} info={info} sheet={dataSheet} menu={menu} onMenu={setMenu}
+        header={header} info={info} menu={menu} onMenu={setMenu}
         routes={activeRoutes} emphasis={emphasis} hour={sceneHour} focus={focus}
         trace={simulationStep&&cue?{route:cue.route,sequence:simulationStep.sequence}:null}
         anchor={showTimeline?eventAnchor:null}
@@ -232,7 +204,7 @@ export default function App(){
           <div><dt>Inspecter</dt><dd>Cliquer sur un objet ou son repère</dd></div>
           <div><dt>Revenir à la vue d’ensemble</dt><dd>Cliquer à nouveau sur l’objet sélectionné ou son repère</dd></div>
         </dl>
-        <div className="info-note"><CircleHelp size={17}/><p>Les données du projet restent accessibles si le navigateur ne peut pas afficher la 3D.</p></div>
+        <div className="info-note"><CircleHelp size={17}/><p>Les fiches des salles restent accessibles si le navigateur ne peut pas afficher la 3D.</p></div>
         <button className="primary-button">Fermer<ArrowRight size={15}/></button>
       </form>
     </dialog>

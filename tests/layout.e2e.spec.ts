@@ -3,8 +3,8 @@ import { test,expect,type Page } from '@playwright/test'
 // Floating interface parts must never cover each other or leave the window, whatever is open.
 const parts:Record<string,string>={
   titre:'.board-title h1',actions:'.board-actions',barre:'.board-toolbar',menu:'.board-tools > .board-menu',
-  données:'.data-switch',fiche:'.inspector',récit:'.scene-event',simulation:'.board-timeline',
-  caméra:'.stage-toolbar',réglages:'.camera-options',coordonnées:'.geo-pin',visite:'.walk-hint',tableau:'.board-sheet',
+  fiche:'.inspector',récit:'.scene-event',simulation:'.board-timeline',
+  caméra:'.stage-toolbar',réglages:'.camera-options',coordonnées:'.geo-pin',visite:'.walk-hint',
 }
 const viewports=[[1920,1080],[1440,900],[1400,800],[1366,768],[1280,720],[1024,768],[960,540]] as const
 
@@ -69,11 +69,6 @@ for(const [width,height] of viewports){
     await page.keyboard.press('ArrowRight')
     await check('simulation étape 2')
     await page.getByRole('button',{name:'Quitter la simulation'}).click()
-    for(const sheet of ['Énergie','Coûts','Extension']){
-      await nav.getByRole('button',{name:sheet,exact:true}).click()
-      await check('tableau '+sheet)
-    }
-    await page.getByRole('button',{name:'Fermer les données'}).click()
     await nav.getByRole('button',{name:'Carte de Benguerir'}).click()
     await check('carte')
     await nav.getByRole('button',{name:'Fermer la carte'}).click()

@@ -102,7 +102,7 @@ export function BoardTools({tool,floor,phase,layer,simulation,menu,onMenu,onTool
 }
 
 type StageProps=SceneState&MenuProps&{
-  scale:Scale;action:CameraAction;header:ReactNode;info:ReactNode;sheet:ReactNode;children:ReactNode;
+  scale:Scale;action:CameraAction;header:ReactNode;info:ReactNode;children:ReactNode;
   onSelect:(id:string)=>void;onZoom:(direction:'in'|'out')=>void;
   onReset:()=>void;onLabels:()=>void;onWalk:()=>void;onWalkExit:()=>void;onQuality:()=>void;onFullscreen:()=>void;onHelp:()=>void;
 }
@@ -114,7 +114,7 @@ export function Stage(props:StageProps){
   const settings=props.menu==='camera'
   useEffect(()=>{if(!ground) setMapOpened(true)},[ground])
   return <div className="stage board-stage" data-testid="stage" data-floor={floor} data-phase={phase} data-scale={scale} data-tool={props.tool} data-theme={hour<6||hour>=18?'night':'day'}>
-    <div className="view-paper" inert={Boolean(props.sheet)}>
+    <div className="view-paper">
       <div className="model-surface" data-inactive={!ground} aria-hidden={!ground}>
         <Suspense fallback={<div className="scene-loading"><Box size={26}/><span>Ouverture de la maquette…</span></div>}>
           <Scene {...props} active={ground} targetLabel={target?nameFor(target):''} onWalkZone={setWalkZone}/>
@@ -129,7 +129,7 @@ export function Stage(props:StageProps){
             <MapView active={!ground}/>
           </Suspense>
         </div>}
-        {props.sheet||props.info}
+        {props.info}
       </div>
       <div className="board-bottom">
         {props.children}
@@ -144,7 +144,7 @@ export function Stage(props:StageProps){
         </div>}
         {ground&&!walk&&property.parcelAnchor&&<div className="geo-pin"><MapPin size={13}/><span>{property.parcelAnchor[0].toFixed(5)}°, {property.parcelAnchor[1].toFixed(5)}°</span></div>}
       </div>
-      {ground&&!props.sheet&&<div className="camera-dock">
+      {ground&&<div className="camera-dock">
         {settings&&!walk&&<div className="camera-options" id="board-camera-options" data-board-menu>
           <span className="eyebrow">PARAMÈTRES</span>
           <button aria-pressed={labels} onClick={props.onLabels}>Repères <span>{labels?'Activés':'Masqués'}</span></button>
@@ -155,11 +155,12 @@ export function Stage(props:StageProps){
         {!walk&&<>
           <button className="icon-button" aria-label="Agrandir la maquette" title="Agrandir" onClick={()=>props.onZoom('in')}><Plus size={19}/></button>
           <button className="icon-button" aria-label="Réduire la maquette" title="Réduire" onClick={()=>props.onZoom('out')}><Minus size={19}/></button>
-          <span/>
           <button className="icon-button" aria-label="Recentrer la caméra" title="Recentrer" onClick={props.onReset}><LocateFixed size={18}/></button>
-          <button className={'icon-button'+(settings?' active':'')} aria-expanded={settings} aria-controls="board-camera-options" data-board-menu aria-label="Paramètres de la maquette" title="Paramètres" onClick={()=>props.onMenu(settings?null:'camera')}><Settings size={17} aria-hidden="true"/></button>
+          <span aria-hidden="true"/>
           <button className="icon-button" aria-label="Passer en visite à pied" title="Visite à pied" onClick={props.onWalk}><Video size={17}/></button>
           <button className="icon-button" aria-label="Plein écran" title="Plein écran" onClick={props.onFullscreen}><Maximize size={16}/></button>
+          <span aria-hidden="true"/>
+          <button className={'icon-button'+(settings?' active':'')} aria-expanded={settings} aria-controls="board-camera-options" data-board-menu aria-label="Paramètres de la maquette" title="Paramètres" onClick={()=>props.onMenu(settings?null:'camera')}><Settings size={17} aria-hidden="true"/></button>
         </>}
         {walk&&<button className="icon-button active" aria-label="Quitter la visite à pied" title="Quitter la visite à pied" onClick={props.onWalkExit}><X size={18}/></button>}
         </div>

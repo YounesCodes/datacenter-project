@@ -37,9 +37,6 @@ async function choose(page:Page,menu:string,option:string|RegExp){
   await tools(page).getByRole('button',{name:menu,exact:true}).click()
   await tools(page).getByRole('button',{name:option,exact:typeof option==='string'}).click()
 }
-async function openSheet(page:Page,option:string){
-  await nav(page).getByRole('button',{name:option,exact:true}).click()
-}
 async function expectCardBesideCamera(page:Page){
   const card=(await selection(page).boundingBox())!
   const camera=(await page.getByLabel('Commandes de la caméra').boundingBox())!
@@ -406,12 +403,6 @@ test('les cartes et les commandes restent séparées pendant une simulation',asy
     await settings(page).click()
   }
   await expectSeparate(page,nav(page),tools(page),note,timeline(page),camera)
-  await nav(page).getByRole('button',{name:'Coûts',exact:true}).click()
-  const sheet=page.getByRole('region',{name:'Coûts',exact:true})
-  await expectSeparate(page,nav(page),sheet)
-  await expect(camera).toBeHidden()
-  await page.getByRole('button',{name:'Fermer les données'}).click()
-  await expect(timeline(page)).toBeVisible()
   await nav(page).getByRole('button',{name:'Carte de Benguerir'}).click()
   await expectSeparate(page,nav(page),page.locator('.geography:visible').last())
 })
@@ -513,58 +504,24 @@ test('la carte reste locale et la caméra de la maquette est conservée',async({
   await expect(zoomOut).not.toHaveClass(/leaflet-disabled/)
 })
 
-test('les coûts et l’énergie présentent les chiffres de la phase sans réglages',async({page})=>{
+test('la navigation affiche la carte et les commandes de caméra suivent l’ordre de la barre',async({page})=>{
   await open(page)
-  await choose(page,'Phase 1',/^Phase 2/)
-  await expect(page.getByTestId('stage')).toHaveAttribute('data-phase','2')
-  await openSheet(page,'Coûts')
-  const sheet=page.locator('.board-sheet')
-  for(const name of ['Estimation basse','Estimation centrale','Estimation haute']){
-    await expect(sheet.getByText(name,{exact:true})).toBeVisible()
+  await expect(nav(page).getByRole('button')).toHaveText(['Carte de Benguerir'])
+  const camera=page.getByLabel('Commandes de la caméra')
+  const zoomIn=camera.getByRole('button',{name:'Agrandir la maquette'})
+  await zoomIn.focus()
+  for(const name of ['Réduire la maquette','Recentrer la caméra','Passer en visite à pied','Plein écran','Paramètres de la maquette']){
+    await page.keyboard.press('Tab')
+    await expect(camera.getByRole('button',{name})).toBeFocused()
   }
-  await expect(sheet.getByText(/Phase 2 · 32 baies · 96 serveurs/)).toBeVisible()
-  await expect(sheet.locator('input, select')).toHaveCount(0)
-  await openSheet(page,'Énergie')
-  await expect(sheet.getByRole('heading',{name:'Électricité à Benguerir'})).toBeVisible()
-  await expect(sheet.getByText('Facture électrique estimée')).toBeVisible()
-  await expect(sheet.locator('input, select')).toHaveCount(0)
-  await sheet.getByRole('button',{name:'Voir la toiture'}).click()
-  await expect(draw(page)).toHaveAttribute('data-rendered-floor','roof')
-})
-
-test('les données s’ouvrent sans déplacer la barre ni la fiche',async({page})=>{
-  await page.setViewportSize({width:1024,height:768})
-  await open(page)
-  await choose(page,'Parcours','Alimentation électrique')
-  const toolbar=page.locator('.board-toolbar')
-  const inspector=page.getByRole('complementary',{name:'Parcours d’infrastructure'})
-  await expect(inspector).toBeVisible()
-  expect(await inspector.locator('.system-path li').first().evaluate(item=>getComputedStyle(item,'::before').content)).toBe('none')
-  const data=nav(page).getByRole('group',{name:'Données'})
-  await expect(data.getByRole('button')).toHaveText(['Énergie','Coûts','Extension'])
-  const position=await toolbar.boundingBox()
-  await data.getByRole('button',{name:'Coûts',exact:true}).click()
-  const sheet=page.locator('.board-sheet')
-  const sheets=[
-    ['Investissement et fonctionnement','Énergie'],
-    ['Électricité à Benguerir','Extension'],
-    ['Équiper le site par étapes','Coûts'],
-  ]
-  for(const [heading,option] of sheets){
-    await expect(sheet.getByRole('heading',{name:heading})).toBeVisible()
-    await expect(toolbar).toBeHidden()
-    const bounds=await sheet.boundingBox()
-    const link=data.getByRole('button',{name:option,exact:true})
-    await link.hover()
-    expect(await sheet.boundingBox()).toEqual(bounds)
-    if(option!=='Coûts') await link.click()
-  }
-  await expect(data.getByRole('button',{name:'Extension',exact:true})).toHaveAttribute('aria-pressed','true')
-  await data.getByRole('button',{name:'Extension',exact:true}).click()
-  await expect(sheet).toBeHidden()
-  expect(await toolbar.boundingBox()).toEqual(position)
-  await expect(inspector).toBeVisible()
-  await expect(sheet.getByText('Services envisagés')).toHaveCount(0)
+  const zoom=async()=>(await readView(page)).zoom
+  await zoomIn.click()
+  await expect.poll(zoom).toBeGreaterThan(1.2)
+  await camera.getByRole('button',{name:'Réduire la maquette'}).click()
+  await expect.poll(zoom).toBeCloseTo(1)
+  await zoomIn.click()
+  await camera.getByRole('button',{name:'Recentrer la caméra'}).click()
+  await expect.poll(zoom).toBe(1)
 })
 
 test('le téléphone affiche le cadre complet et les commandes restent utilisables',async({page})=>{
@@ -580,10 +537,7 @@ test('le téléphone affiche le cadre complet et les commandes restent utilisabl
   await expect.poll(async()=>(await readView(page)).zoom).toBe(1)
   await choose(page,'Étages','Toiture')
   await expect(draw(page)).toHaveAttribute('data-rendered-floor','roof')
-  await openSheet(page,'Coûts')
-  await expect(page.getByRole('heading',{name:'Investissement et fonctionnement'})).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
-  await page.getByRole('button',{name:'Fermer les données'}).click()
   await page.setViewportSize({width:320,height:420})
   await choose(page,'Étages','Rez-de-chaussée')
   const reserve=marker(page,'reserve')
@@ -593,7 +547,7 @@ test('le téléphone affiche le cadre complet et les commandes restent utilisabl
   await expect(selection(page)).toHaveCount(0)
 })
 
-test('les données restent disponibles sans WebGL',async({page})=>{
+test('les fiches des salles restent disponibles sans WebGL',async({page})=>{
   await page.addInitScript(()=>{
     const original=HTMLCanvasElement.prototype.getContext
     HTMLCanvasElement.prototype.getContext=function(this:HTMLCanvasElement,type:string,...options:unknown[]){
@@ -605,6 +559,4 @@ test('les données restent disponibles sans WebGL',async({page})=>{
   await expect(page.getByText('La vue 3D est indisponible')).toBeVisible()
   await page.locator('.fallback-rooms').getByRole('button',{name:'Salle A',exact:true}).click()
   await expect(page.getByRole('heading',{name:'Salle serveurs A'})).toBeVisible()
-  await openSheet(page,'Coûts')
-  await expect(page.getByRole('heading',{name:'Investissement et fonctionnement'})).toBeVisible()
 })
