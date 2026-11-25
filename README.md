@@ -1,6 +1,6 @@
 # Projet de centre de données à Benguerir
 
-Maquette 3D et outil de présentation en français. Le navigateur affiche le bâtiment, ses équipements, sept simulations et un modèle d’énergie et de coûts. L’application fonctionne sans compte ni serveur applicatif.
+Maquette 3D et outil de présentation en français. Le navigateur affiche le bâtiment, ses équipements, cinq simulations et un modèle d’énergie et de coûts. L’application fonctionne sans compte ni serveur applicatif.
 
 Le repère **32.25065, −7.93090** correspond à l’emplacement probable déduit de l’annonce et de l’imagerie. Les **limites parcellaires restent non vérifiées**. La parcelle de la maquette sert à étudier un aménagement de 2 465 m². Les quantités, prix, flux et événements sont des hypothèses de projet. Le dossier de recherche indique les sources et les validations en attente. [Recherche](research/README.md) · [Localisation](research/localisation-parcelle.md)
 
@@ -43,9 +43,8 @@ Pour un usage public soutenu, prévoir un fournisseur de tuiles adapté au trafi
 | Enceinte, voirie et zone d’extension | `src/model.ts`, `boundary` et `reserve`. Adapter les positions des accès et installations dans `src/outdoorGeometry.ts`. |
 | Implantation des baies | `src/model.ts`, `rackPositions`, `specs.rack` et `phases`. Revoir le dégagement des allées et la distribution de l’équipement si la densité change. |
 | Matériel, CPU, mémoire, disques, puissance | `src/model.ts`, `specs`, `equipment` et `phases`. Les calculs communs figurent dans `src/engineering.ts`. |
-| Électricité, photovoltaïque | `defaults` dans `src/engineering.ts` et `specs.solar` dans `src/model.ts`. L’interface permet aussi de modifier le tarif, les frais fixes, le PUE et la puissance solaire. |
+| Électricité et photovoltaïque | `energy` et `mediumVoltage` dans `src/engineering.ts`. La production annuelle de Benguerir figure dans `specs.solar` dans `src/model.ts`. |
 | Prix de l’équipement et entretien | `costRows` et `operations` dans `src/engineering.ts`. Consigner la date, les inclusions et la source des modifications dans le dossier de recherche. |
-| Prix des services et rythme de vente | `services` dans `src/model.ts`, `scenarios` et `projections` dans `src/engineering.ts`. |
 | Liaisons et simulations | `coordinates`, `topology` dans `src/model.ts` et `simulations` dans `src/simulations.ts`. |
 
 ### Remplacer le repère par une parcelle vérifiée

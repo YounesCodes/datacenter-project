@@ -1,7 +1,8 @@
 import * as T from 'three'
-import { equipment, hallInfrastructure,property,type Phase,type Point } from './model'
+import { equipment,hallInfrastructure,parking,property,technicalPorts,type Phase,type Point } from './model'
 import type { Capacity } from './engineering'
-import { batch, colors as C, flooring, segment, type Place } from './geometryTools'
+import { batch,cableGland,colors as C,flooring,rod,segment,type Place } from './geometryTools'
+import { fuelTank,oliveTree } from './outdoorDetails'
 
 function terrain(group:T.Group){
   const shape=new T.Shape(property.boundary.map(([x,z])=>new T.Vector2(x,-z)))
@@ -10,34 +11,35 @@ function terrain(group:T.Group){
   const mesh=new T.Mesh(geometry,new T.MeshStandardMaterial({color:C.stone,roughness:.98}))
   mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh)
 }
-function tree(box:Place,x:number,z:number,s:number){
-  box([x+.25,.012,z+.26],[s*1.3,.019,s*.99],'#4a6a55',undefined,0,'sphere','ghost')
-  box([x,s*.55,z],[s*.14,s*1.12,s*.14],'#78654b',undefined,0,'round')
-  box([x,s*1.28,z],[s*1.1,s*1.05,s*1.05],'#788e63',undefined,.24,'tree')
-  box([x-s*.34,s*1.12,z+s*.16],[s*.75,s*.75,s*.7],'#8f9c70',undefined,.45,'tree')
-  box([x+s*.31,s*1.44,z-s*.08],[s*.65,s*.66,s*.74],'#a1ae83',undefined,-.4,'tree')
-}
-function car(box:Place,x:number,z:number,color:string){
-  box([x,.32,z],[1.74,.46,4],color)
-  box([x,.72,z-.07],[1.59,.42,2.36],C.screen)
-  box([x,.956,z-.09],[1.51,.07,1.59],color)
-  for(const s of [-1,1]){
-    for(const e of [-1,1]) box([x+s*.83,.2,z+e*1.23],[.42,.27,.62],C.rack)
-    box([x+s*.54,.41,z+2],[.38,.12,.045],C.white)
-    box([x+s*.58,.41,z-2],[.29,.1,.045],'#a75048')
+const landscapedBeds:{rect:[number,number,number,number];trees:Point[]}[]=[
+  {rect:[-28,-20.2,5.9,5.9],trees:[[-26.4,-18.35,1.18],[-24.16,-16.4,1.05]]},
+  {rect:[27.1,-12.35,1.81,23.35],trees:[[28,-9.4,.74],[28,-3.8,.73],[28,2.8,.75],[28,8.1,.71]]},
+  {rect:[-28,19.37,24,1.75],trees:[[-24.4,20.25,.74],[-18.9,20.24,.73],[-12.8,20.25,.71],[-6.85,20.24,.75]]},
+  {rect:[9.55,19.68,6.6,1.43],trees:[[11.2,20.4,.60],[14.7,20.4,.61]]},
+]
+function landscaping(box:Place){
+  for(const {rect:[x,z,w,d],trees} of landscapedBeds){
+    flooring(box,[x,z,w,d],.035,'#a8a68a')
+    flooring(box,[x+.11,z+.11,w-.22,d-.22],.045,'#a1a788')
+    for(const [tx,tz,size] of trees){
+      box([tx,.048,tz],[.68*size,.014,.62*size],'#97886d',undefined,.45,'round')
+      oliveTree(box,tx,tz,size)
+    }
   }
 }
-export function outdoor(cap:Capacity,phase:Phase){
+export function outdoor(cap:Capacity,phase:Phase,visibleIds?:ReadonlySet<string>){
   const group=new T.Group()
-  terrain(group)
-  const {box,finish}=batch()
-  flooring(box,[-28,12.9,54,7.4],.035,C.asphalt)
+  if(!visibleIds||visibleIds.has('reserve')) terrain(group)
+  const {box,finish}=batch(visibleIds)
+  flooring(box,[-28,12.9,54,6.42],parking.surfaceY,C.asphalt)
   flooring(box,[20.5,-12.5,6.5,32],.04,C.asphalt)
   flooring(box,[-28,-12.85,7.6,25.65],.045,'#b7b6a8')
-  flooring(box,[-21,-19.9,25.4,6.6],.05,'#bfc6b8')
+  flooring(box,[-21,-19.9,26.1,6.6],.05,'#bfc6b8')
   flooring(box,[2.1,11.9,7,7.9],.06,'#a8ada2')
   flooring(box,[11,12,8,2.1],.062,'#deded0')
   flooring(box,[17,13.7,2.1,6.5],.065,C.trim)
+  flooring(box,[19.92,2.15,1.86,2.12],.096,C.concrete)
+  flooring(box,[19.92,10.48,1.56,1.44],.074,C.concrete)
   flooring(box,property.reserve,.055,'#b6c09d','reserve')
   const [rx,rz,rw,rd]=property.reserve
   for(const [a,b] of [
@@ -63,14 +65,14 @@ export function outdoor(cap:Capacity,phase:Phase){
       for(const h of [.2,.77,1.37]) segment(box,[x,h,z],[nx,h,nz],.047,C.fence,.056)
     }
   }
-  for(let i=0;i<10;i++){
-    const x=-18+i*2.52
-    box([x,.065,16.65],[.075,.024,5.12],C.white)
-    if([0,2,4,5,6].includes(i)) car(box,x+1.2,16.65,['#dbded0','#6d8082','#ad8260','#f4eddb','#778674'][i%5])
+  for(let i=0;i<=parking.bayCount;i++){
+    const x=parking.firstLine+i*parking.bayWidth
+    box([x,.065,parking.z],[.075,.024,parking.bayDepth],C.white)
   }
-  box([-5.4,.065,14.11],[25.3,.025,.082],C.white)
+  const rowWidth=parking.bayCount*parking.bayWidth
+  box([parking.firstLine+rowWidth/2,.065,14.11],[rowWidth,.025,.082],C.white)
   for(let i=0;i<10;i++) box([18.05,.081,14+i*.56],[1.83,.027,.2],C.white)
-  for(const [x,z,s] of [[-26.5,-18.2,1.38],[-23.3,-18.6,1.12],[-3,-18.4,1.36],[2.2,-18.7,1.05],[24.2,-17,1.52],[26.5,-16.4,1.3],[28,-8,1.13],[28.2,-4.4,1.35],[28.2,4.7,1.34],[-26.5,10.8,1.5],[-25.2,16.3,1.4],[-27,18.6,1.45],[-20,19.8,1.24],[-14,19.8,.82],[-8,19.8,.86],[2.7,19.7,1.1],[14,19.54,1.18],[27.8,18.75,1.25]] as Point[]) tree(box,x,z,s)
+  if(!visibleIds) landscaping(box)
   box([25.9,1.32,14.7],[2.36,2.64,2.5],C.trim,'security')
   box([25.9,2.69,14.7],[2.67,.14,2.78],C.fence,'security')
   box([24.69,1.58,14.7],[.08,.9,1.57],C.screen,'security')
@@ -80,6 +82,14 @@ export function outdoor(cap:Capacity,phase:Phase){
   box([27.17,3.33,11.33],[.26,.19,.48],C.white,'camera',.64)
   const point=(id:string)=>equipment.find(item=>item.id===id)!.position
   const [tx,,tz]=point('transformer')
+  const [gridX,gridY,gridZ]=technicalPorts.grid
+  box([gridX,.115,gridZ],[1.59,.14,.98],C.trim,'transformer')
+  box([gridX,.754,gridZ],[1.29,1.13,.72],'#66796f','transformer')
+  box([gridX,1.34,gridZ],[1.31,.079,.74],C.metal,'transformer')
+  box([gridX,.79,gridZ+.366],[1.12,.91,.042],'#87968a','transformer')
+  box([gridX+.281,.81,gridZ+.397],[.051,.178,.036],C.rack,'transformer')
+  box([gridX-.283,.938,gridZ+.398],[.164,.137,.023],'#c3a867','transformer')
+  cableGland(box,[gridX,gridY,gridZ],'transformer')
   box([tx,.12,tz],[4.6,.24,4.7],C.trim,'transformer')
   box([tx,1.1,tz],[2.45,1.82,2],C.metal,'transformer')
   box([tx,2.025,tz],[2.56,.12,2.12],'#779087','transformer')
@@ -97,6 +107,25 @@ export function outdoor(cap:Capacity,phase:Phase){
   box([tx+.55,1.35,tz+1.089],[.61,.67,.24],'#96a597','transformer')
   box([tx+.55,1.52,tz+1.217],[.26,.132,.021],C.rack,'transformer')
   box([tx+.55,1.52,tz+1.235],[.184,.072,.028],'#bdcdad','transformer')
+  const [outX,outY,outZ]=technicalPorts.transformerExit
+  box([outX-.175,outY,outZ],[.34,.32,.43],C.metal,'transformer')
+  rod(box,[outX-.132,outY,outZ],[outX,outY,outZ],.13,'#b5aa90','transformer')
+  const [entryX,entryY,entryZ]=technicalPorts.powerEntry
+  box([entryX+.066,entryY,entryZ],[.13,.34,.41],C.metal,'switchgear')
+  for(const id of ['ispA','ispB']){
+    const [x,y,z]=technicalPorts[id]
+    const width=.96,depth=.71,lidWidth=.78,lidDepth=.56,lidHeight=.036
+    const sideWidth=(width-lidWidth)/2,endDepth=(depth-lidDepth)/2
+    const baseHeight=.11-lidHeight,lidY=y-lidHeight/2
+    box([x,y-lidHeight-baseHeight/2,z],[width,baseHeight,depth],C.concrete,id)
+    // The concrete rim and steel lid share a height, but have separate footprints.
+    for(const side of [-1,1]){
+      box([x+side*(lidWidth+sideWidth)/2,lidY,z],[sideWidth,lidHeight,depth],C.concrete,id)
+      box([x,lidY,z+side*(lidDepth+endDepth)/2],[lidWidth,lidHeight,endDepth],C.concrete,id)
+    }
+    box([x,lidY,z],[lidWidth,lidHeight,lidDepth],'#596861',id)
+    for(let i=0;i<5;i++) box([x,y+.008,z+.07*(i-2)],[.67,.017,.021],'#8b998b',id)
+  }
   const [gx,,gz]=point('generator')
   for(let i=0;i<cap.generators;i++){
     const z=gz-2.05+i*2.1
@@ -118,12 +147,11 @@ export function outdoor(cap:Capacity,phase:Phase){
     }
     box([gx+1.53,2.187,z],[.128,.49,.128],C.metal,'generator',0,'round')
     box([gx+1.53,2.446,z],[.196,.043,.196],C.rack,'generator',0,'round')
+    box([gx+2.224,1.16,z],[.116,.31,.44],C.metal,'generator')
+    rod(box,[gx+2.24,1.16,z],[gx+2.34,1.16,z],.13,C.rack,'generator')
   }
   const [fx,,fz]=point('fuel')
-  box([fx,.17,fz],[5,.34,2.07],C.trim,'fuel')
-  box([fx,.86,fz],[1.29,3.55,1.29],'#768c81','fuel',Math.PI/2,'round','solid',Math.PI/2)
-  for(const x of [-2.33,2.33]) box([fx+x,.27,fz],[.16,.45,2.05],C.concrete,'fuel')
-  for(const z of [-.99,.99]) box([fx,.27,fz+z],[4.51,.45,.15],C.concrete,'fuel')
+  fuelTank(box,fx,fz)
   for(const hall of hallInfrastructure) for(let i=0;i<cap.coolingUnits/2;i++){
     const id=hall.suffix==='A'?'condenser':'condenser-b'
     const columns=hall.suffix==='A'?6:4
@@ -140,6 +168,11 @@ export function outdoor(cap:Capacity,phase:Phase){
       box([x+f,1.38,z],[.92,.09,.92],C.rack,id,0,'round')
       box([x+f,1.435,z],[.59,.035,.59],'#718982',id,0,'round')
       for(const rot of [0,1.05,2.1]) box([x+f,1.46,z],[.09,.03,.78],C.rack,id,rot)
+    }
+    box([x+1.08,.79,z],[.04,.6,.98],C.metal,id)
+    for(const [y,offset] of [[.94,-.30],[.62,.30]]){
+      rod(box,[x+1.075,y,z+offset],[x+1.19,y,z+offset],.135,'#b0a280',id)
+      rod(box,[x+1.132,y,z+offset],[x+1.173,y,z+offset],.19,C.rack,id)
     }
   }
   finish(group)

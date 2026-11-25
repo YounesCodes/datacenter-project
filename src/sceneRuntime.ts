@@ -1,19 +1,22 @@
 import * as T from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { center,coordinates,equipment,normalRoutes,property,rackPositions,rooms,topology,walkHeight,type Floor,type Layer,type Point } from './model'
+import { center,coordinates,equipment,normalRoutes,property,rackPositions,rooms,topology,visitorArrival,walkHeight,walkZoneAt,type Floor,type Layer,type Point,type WalkZone } from './model'
 import { bounds,disposeGeometry,geometry,visibleFloor,type Geometry } from './siteGeometry'
-import type { Picks } from './geometryTools'
+import { disposeGroup,type Picks } from './geometryTools'
 import type { Capacity,Inputs } from './engineering'
 import type { Phase } from './model'
+import { assignLanes,offsetPolyline } from './flowLanes'
+import { flowMotion,lineDashes,routeStyle,type FlowFocus,type LineStyle } from './flowPresentation'
 
-import type { Angle,CameraAction,ModelSnapshot } from './viewState'
-export const routeColors:Record<Layer,string>={power:'#ce8e28',air:'#3386a2',network:'#7463b0',compute:'#4975a6',storage:'#9a683d',solar:'#8b9838'}
-export type SceneState={cap:Capacity;inputs:Inputs;phase:Phase;floor:Floor;target:string|null;labels:boolean;isolated:boolean;layer:Layer|null;routes:string[]|null;playing:boolean;hour:number;walk:boolean;economy:boolean;tool:'select'|'pan';anchor:string|null;active?:boolean}
-const angles:Record<Angle,Point>={iso:[.77,.85,1],top:[0,1,.001],front:[0,.13,1],rear:[0,.13,-1],left:[-1,.13,0],right:[1,.13,0]}
+import type { CameraAction,ModelSnapshot } from './viewState'
+type Trace={route:string;sequence:number}
+export type SceneState={cap:Capacity;inputs:Inputs;phase:Phase;floor:Floor;target:string|null;labels:boolean;isolated:boolean;layer:Layer|null;focus:FlowFocus|null;routes:string[]|null;emphasis:string[]|null;trace:Trace|null;hour:number;walk:boolean;economy:boolean;tool:'select'|'pan';anchor:string|null;active?:boolean}
+const traceDuration=1700
+const overviewDirection:Point=[.77,.85,1]
 const labelsByRoom:Record<string,Point>={
   'hall-a':[-14,2.8,-8.25],'hall-b':[.35,2.8,-8.25],power:[-13.55,2.52,5.7],
   cooling:[-2.5,2.42,6.6],network:[15,2.59,-4.45],reception:[15,2.45,3],
-  delivery:[5.2,2.2,7.1],noc:[13.5,2.34,-9.6],
+  delivery:[5.35,2.35,7.6],noc:[13.5,2.34,-9.6],
 }
 export const labelAnchor=(id:string):Point|undefined=>{
   if(labelsByRoom[id]) return labelsByRoom[id]
@@ -26,20 +29,13 @@ export const labelAnchor=(id:string):Point|undefined=>{
   if(id==='reserve'){const [x,,z]=center(property.reserve);return [x,.9,z]}
 }
 
-function lineFor(keys:string[],color:string){
-  const points=keys.map(key=>{
-    const p=coordinates[key]
-    const y=p[1]===0?1.65:p[1]
-    return new T.Vector3(p[0],y,p[2])
-  })
-  const curve=new T.CurvePath<T.Vector3>()
-  for(let i=1;i<points.length;i++) curve.add(new T.LineCurve3(points[i-1],points[i]))
-  return {curve,points:curve.getPoints(keys.length*10),color,dots:Math.min(9,keys.length+3)}
+function lineFor(route:string,keys:string[],style:LineStyle){
+  return {route,points:keys.map(key=>new T.Vector3(...coordinates[key])),style,lane:0}
 }
 type Path=ReturnType<typeof lineFor>
 const motion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHost:HTMLDivElement,onPick:(id:string)=>void,onWalkExit:()=>void){
+export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHost:HTMLDivElement,onPick:(id:string)=>void,onWalkExit:()=>void,onWalkZone:(zone:WalkZone|null)=>void){
   const hud=host.closest('.board-stage')?.querySelector('.board-hud')
   const world=new T.Scene()
   const camera=new T.OrthographicCamera()
@@ -59,18 +55,19 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
   renderer.domElement.setAttribute('aria-label','Maquette 3D interactive du centre de données')
   renderer.domElement.setAttribute('role','img')
   const flowCanvas=document.createElement('canvas')
-  flowCanvas.className='flow-particles'
+  flowCanvas.className='flow-overlay'
   flowCanvas.setAttribute('aria-hidden','true')
   const flowContext=flowCanvas.getContext('2d')
   host.append(renderer.domElement,flowCanvas)
   const hemi=new T.HemisphereLight('#e7f1ff','#b7a88e',2.35)
+  const walkFill=new T.AmbientLight('#fff8e6',0)
   const sun=new T.DirectionalLight('#fff0d6',2.1)
   sun.position.set(-31,52,38)
   sun.castShadow=true
   sun.shadow.mapSize.set(1536,1536)
   Object.assign(sun.shadow.camera,{left:-36,right:36,top:31,bottom:-32,near:1,far:115})
   sun.shadow.normalBias=.055
-  world.add(hemi,sun)
+  world.add(hemi,sun,walkFill)
   const backdrop=new T.Mesh(new T.PlaneGeometry(260,260),new T.ShadowMaterial({opacity:.18}))
   backdrop.rotation.x=-Math.PI/2;backdrop.position.y=-.84;backdrop.receiveShadow=true;world.add(backdrop)
   const control=new OrbitControls(camera,renderer.domElement)
@@ -80,16 +77,19 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
   control.touches={ONE:T.TOUCH.ROTATE,TWO:T.TOUCH.DOLLY_PAN}
   const selection=new T.Mesh(new T.PlaneGeometry(1,1),new T.MeshBasicMaterial({color:'#5b9a75',transparent:true,opacity:.28,depthWrite:false,side:T.DoubleSide,polygonOffset:true,polygonOffsetFactor:-8}))
   selection.rotation.x=-Math.PI/2;selection.visible=false;world.add(selection)
-  const test=new T.Vector3(),dot=new T.Vector3()
+  const test=new T.Vector3(),projected=new T.Vector3()
   const ray=new T.Raycaster(),pointer=new T.Vector2()
   const keys=new Set<string>()
-  let state:SceneState|undefined,building:Geometry|undefined
+  let state:SceneState|undefined,building:Geometry|undefined,parked:T.Group|undefined
   let routes:Path[]=[]
-  let aspect=1,height=54,width=72,frame=0,last=0,angle:Angle='iso',renders=0,flowRenders=0,disposed=false,dirty=true
+  let highlighted:Path[]=[]
+  let contextRoutes:Path[]=[]
+  let aspect=1,height=54,width=72,frame=0,last=0,renders=0,flowRenders=0,disposed=false,dirty=true
   let move:{from:T.Vector3;to:T.Vector3;fromTarget:T.Vector3;toTarget:T.Vector3;fromZoom:number;toZoom:number;start:number}|null=null
   let floorFade:Animation|undefined
   let lighting:{from:number;to:number;start:number}|null=null
-  let currentHour=12,flowTime=0,wasPlaying=false
+  let currentHour=12,flowTime=0,wasTracing=false,flowClock=0,lastFlowDraw=0,revealAt=0
+  let routeLayer:Layer|null=null
   let installationStart=0,interacting=false,settleTimer=0
   let down:{x:number;y:number}|null=null
   let drag:{x:number;y:number}|null=null
@@ -99,6 +99,13 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     if(!frame&&!disposed&&state?.active!==false) frame=requestAnimationFrame(render)
   }
   function invalidate(){dirty=true;requestFrame()}
+  void import('./parkingVehicles').then(module=>module.parkedVehicles()).then(group=>{
+    if(disposed){disposeGroup(group);return}
+    parked=group;world.add(group)
+    parked.visible=!state?.focus
+    renderer.shadowMap.needsUpdate=true
+    invalidate()
+  }).catch(error=>console.warn('Impossible de charger les véhicules stationnés',error))
   function fit(){
     aspect=Math.max(.25,host.clientWidth/Math.max(host.clientHeight,1))
     height=Math.max(48,(host.clientWidth<500?79:76)/aspect);width=height*aspect
@@ -124,6 +131,14 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     fit()
   }
   const walkingEye=1.77
+  let walkZoneId:string|null=null
+  function updateWalkZone(){
+    const {x,y,z}=eye.position
+    const zone=walkZoneAt(x,z,y-walkingEye)
+    if(zone.id===walkZoneId) return
+    walkZoneId=zone.id
+    onWalkZone(zone)
+  }
   function walkTo(x:number,z:number){
     const current=eye.position.y-walkingEye
     const level=walkHeight(x,z,current)
@@ -141,6 +156,7 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     const z=eye.position.z+(-horizontal*Math.sin(yaw)-vertical*Math.cos(yaw))*speed
     walkTo(x,eye.position.z)
     walkTo(eye.position.x,z)
+    updateWalkZone()
   }
   function updateLabels(){
     const cameraInUse=activeCamera()
@@ -158,13 +174,13 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
       const floor=bounds(id)?.floor
       const rack=rackPositions.find(item=>item.id===id)
       const hallRack=rack?.hall===state?.target&&Boolean(rack)
-      const eligible=showLabels&&(!floor||floor===state?.floor)
+      const eligible=showLabels&&(!floor||floor===state?.floor)&&(!state?.focus||state.focus.ids.has(id))
       if(!at||!eligible||!selected&&!(hallRack||!state?.target&&camera.zoom<2.6)){element.hidden=true;continue}
       test.set(...at).project(cameraInUse)
       const x=(test.x*.5+.5)*width,anchorY=(-test.y*.5+.5)*height
       const half=(element.textContent?.length??0)*(compact?2.65:3.1)+(compact?7:10)
       if(x<half||x>width-half||anchorY<0||anchorY>height||test.z< -1||test.z>1){element.hidden=true;continue}
-      const offsets=compact&&!state?.target?[0,clearance,-clearance*2,clearance*2]:[0]
+      const offsets=!state?.target?[0,clearance,-clearance,clearance*2]:[0]
       const gap=5
       const bands=covers.filter(rect=>rect.left-view.left<x+half+gap&&rect.right-view.left>x-half-gap)
       for(const rect of bands){
@@ -185,7 +201,8 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
       element.style.setProperty('--marker-stem-above',Math.max(0,-offset-clearance)+'px')
       element.style.transform='translate3d('+x.toFixed(1)+'px,'+y.toFixed(1)+'px,0) translate(-50%, -100%)'
     }
-    const at=state?.anchor?labelAnchor(state.anchor):undefined
+    const reservePort=state?.trace?.route==='supplyAReserve'?coordinates.cracRefrigerantAReserve:undefined
+    const at=reservePort??(state?.anchor?labelAnchor(state.anchor):undefined)
     if(!at){eventHost.dataset.visible='false';return}
     test.set(...at).project(cameraInUse)
     const x=(test.x*.5+.5)*width,y=(-test.y*.5+.5)*height
@@ -230,7 +247,8 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
       if(progress===1) installationStart=0
     }
     if(!inWalk()&&control.update()) dirty=true
-    if(dirty||move||lighting||installationStart||(inWalk()&&keys.size)){
+    const redraw=Boolean(dirty||move||lighting||installationStart||(inWalk()&&keys.size))
+    if(redraw){
       setResolution(Boolean(state?.economy),interacting||Boolean(move||(inWalk()&&keys.size)))
       renderer.render(world,activeCamera())
       updateLabels()
@@ -244,75 +262,176 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
       host.dataset.modelView=JSON.stringify(snapshot())
       dirty=false
     }
-    const pulse=Boolean(state?.playing&&!motion()&&routes.length)
-    if(pulse&&wasPlaying) flowTime+=Math.min(80,delta)
-    wasPlaying=pulse
-    drawFlow(flowTime)
-    if(move||lighting||installationStart||(inWalk()&&keys.size)||(pulse&&routes.length)) requestFrame()
+    const tracing=Boolean(state?.trace&&highlighted.length&&!motion()&&flowTime<traceDuration)
+    if(tracing&&wasTracing) flowTime=Math.min(traceDuration,flowTime+Math.min(80,delta))
+    const flowing=Boolean(routes.length&&!motion())
+    if(flowing) flowClock+=Math.min(80,delta)
+    // The 2D flow overlay is cheap, but cap it so idle scenes stay light.
+    const flowDue=flowing&&now-lastFlowDraw>=(state?.economy?66:33)
+    if(redraw||tracing||wasTracing||flowDue){drawFlow();lastFlowDraw=now}
+    wasTracing=tracing&&flowTime<traceDuration
+    if(move||lighting||installationStart||(inWalk()&&keys.size)||wasTracing||flowing) requestFrame()
   }
-  function drawFlow(time:number){
-    if(!flowContext) return
+  function drawFlow(){
+    const ctx=flowContext
+    if(!ctx) return
     const width=flowCanvas.width,height=flowCanvas.height
-    flowContext.clearRect(0,0,width,height)
+    ctx.clearRect(0,0,width,height)
     if(!routes.length) return
     const drawingStart=performance.now()
     const cameraInUse=activeCamera()
+    const progress=state?.trace&&highlighted.length?(motion()?1:flowTime/traceDuration):highlighted.length?1:0
+    type ScreenPoint={x:number;y:number}
     function project(point:T.Vector3){
       if(renderer.clippingPlanes.some(plane=>plane.distanceToPoint(point)<0)) return null
-      dot.copy(point).project(cameraInUse)
-      if(dot.z< -1||dot.z>1) return null
-      return {x:(dot.x*.5+.5)*width,y:(-dot.y*.5+.5)*height}
+      projected.copy(point).project(cameraInUse)
+      if(projected.z< -1||projected.z>1) return null
+      return {x:(projected.x*.5+.5)*width,y:(-projected.y*.5+.5)*height}
     }
-    for(const [index,path] of routes.entries()){
-      flowContext.beginPath()
-      flowContext.lineJoin='round';flowContext.lineCap='round'
-      let started=false
+    // Project each path once per frame, then shift it into its lane in screen pixels.
+    const lanePx=6.5
+    const screen=new Map<Path,ScreenPoint[][]>()
+    for(const path of routes){
+      const runs:ScreenPoint[][]=[]
+      let run:ScreenPoint[]=[]
       for(const point of path.points){
         const p=project(point)
-        if(!p){started=false;continue}
-        if(started) flowContext.lineTo(p.x,p.y)
-        else{flowContext.moveTo(p.x,p.y);started=true}
+        if(p) run.push(p)
+        else{if(run.length>1) runs.push(run);run=[]}
       }
-      flowContext.strokeStyle='#f8fbf7';flowContext.lineWidth=3.8;flowContext.stroke()
-      flowContext.strokeStyle=path.color;flowContext.lineWidth=1.8;flowContext.stroke()
-      flowContext.fillStyle=path.color
-      flowContext.strokeStyle='#fcfdf8';flowContext.lineWidth=1.1
-      flowContext.beginPath()
-      for(let i=0;i<path.dots;i++){
-        const point=path.curve.getPointAt((time*.00025+i/path.dots+index*.17)%1)
-        const p=project(point)
-        if(!p) continue
-        flowContext.moveTo(p.x+3.2,p.y);flowContext.arc(p.x,p.y,3.2,0,Math.PI*2)
+      if(run.length>1) runs.push(run)
+      screen.set(path,path.lane?runs.map(points=>offsetPolyline(points,path.lane*lanePx)):runs)
+    }
+    const ease=(t:number)=>1-Math.pow(1-Math.min(1,Math.max(0,t)),3)
+    // A new parcours draws itself from its sources; a simulation step redraws only the route it follows.
+    const layerReveal=motion()?1:ease((flowClock-revealAt)/900)
+    const traceReveal=motion()?1:ease(progress*1.8)
+    const traced=new Set(state?.trace?highlighted:[])
+    const reveal=(path:Path)=>traced.has(path)?traceReveal:layerReveal
+    const append=(path:Path,fraction=reveal(path))=>{
+      const runs=screen.get(path)??[]
+      let budget=Infinity
+      if(fraction<1){
+        let total=0
+        for(const points of runs) for(let i=1;i<points.length;i++) total+=Math.hypot(points[i].x-points[i-1].x,points[i].y-points[i-1].y)
+        budget=total*fraction
       }
-      flowContext.fill();flowContext.stroke()
+      for(const points of runs){
+        if(budget<=0) break
+        ctx.moveTo(points[0].x,points[0].y)
+        for(let i=1;i<points.length&&budget>0;i++){
+          const a=points[i-1],b=points[i],length=Math.hypot(b.x-a.x,b.y-a.y)
+          if(length<=budget){ctx.lineTo(b.x,b.y);budget-=length;continue}
+          const k=budget/length
+          ctx.lineTo(a.x+(b.x-a.x)*k,a.y+(b.y-a.y)*k)
+          budget=0
+        }
+      }
+    }
+
+    ctx.lineJoin='round';ctx.lineCap='round'
+    const paper='#fffdf1'
+    const stroke=(paths:Path[],opacity:number,weight:number,outline:number)=>{
+      // Stroke shared segments together to keep junctions the same intensity as the path.
+      for(const style of new Set(paths.map(path=>path.style))){
+        ctx.beginPath()
+        for(const path of paths) if(path.style===style) append(path)
+        ctx.setLineDash(lineDashes[style.pattern])
+        ctx.globalAlpha=opacity;ctx.strokeStyle=paper;ctx.lineWidth=weight+outline;ctx.stroke()
+        ctx.strokeStyle=style.color;ctx.lineWidth=weight;ctx.stroke()
+      }
+    }
+    if(highlighted.length){
+      stroke(contextRoutes,state?.trace?.57:.34,1.9,1.55)
+      const emphasis=state?.trace?Math.sin(Math.PI*progress):0
+      stroke(highlighted,1,3.05+.55*emphasis,2.4+1.2*emphasis)
+    }else{
+      stroke(routes,1,2.65,2.2)
+    }
+    // Moving marks show direction and medium: sparks for current, slow streaks for air, packets for data.
+    if(routeLayer&&!motion()){
+      const moving=highlighted.length?highlighted:routes
+      for(const style of new Set(moving.map(path=>path.style))){
+        const group=moving.filter(path=>path.style===style)
+        const flow=flowMotion(routeLayer,group[0].route)
+        const period=flow.dash[0]+flow.dash[1]
+        ctx.beginPath()
+        for(const path of group) append(path)
+        ctx.setLineDash(flow.dash)
+        ctx.lineDashOffset=-((flowClock/1000*flow.speed)%period)
+        ctx.strokeStyle=paper
+        ctx.lineWidth=flow.width*(highlighted.length?1.25:1)
+        ctx.globalAlpha=flow.alpha
+        ctx.stroke()
+      }
+      ctx.lineDashOffset=0
+      host.dataset.flowClock=flowClock.toFixed(0)
+    }
+    ctx.globalAlpha=1
+    ctx.setLineDash([])
+    if(highlighted.length){
+      const marked:ScreenPoint[]=[]
+      for(const path of highlighted){
+        const runs=screen.get(path)
+        if(!runs?.length) continue
+        const first=runs[0][0],lastRun=runs[runs.length-1],end=lastRun[lastRun.length-1]
+        for(const [p,source] of [[first,true],[end,false]] as const){
+          if(!source&&reveal(path)<.98) continue
+          if(marked.some(other=>Math.hypot(other.x-p.x,other.y-p.y)<8)) continue
+          marked.push(p)
+          ctx.beginPath();ctx.arc(p.x,p.y,3.3,0,Math.PI*2)
+          ctx.fillStyle=source?path.style.color:paper;ctx.fill()
+          ctx.strokeStyle=source?paper:path.style.color;ctx.lineWidth=1.45;ctx.stroke()
+        }
+      }
     }
     host.dataset.flowTime=flowTime.toFixed(1)
+    host.dataset.flowProgress=progress.toFixed(3)
     host.dataset.flowFrames=String(++flowRenders)
     host.dataset.flowMs=(performance.now()-drawingStart).toFixed(2)
   }
-  function setRoutes(layer:Layer|null,active:string[]|null){
+  function setRoutes(layer:Layer|null,active:string[]|null,highlight:string[]){
+    if(layer!==routeLayer) revealAt=flowClock
     routes=[]
+    highlighted=[]
+    contextRoutes=[]
+    routeLayer=layer
+    delete host.dataset.flowHighlight
+    delete host.dataset.flowProgress
     if(!layer){delete host.dataset.flowRoutes;return}
-    const tones={warm:'#c37150',refrigerant:'#7b6090',grid:routeColors.power,reduced:'#79a5ad'}
     routes=(active??normalRoutes[layer]).flatMap(id=>{
       const route=topology[layer][id]
-      return route?.paths.map(path=>lineFor(path,route.tone?tones[route.tone]:routeColors[layer]))??[]
+      return route?.paths.map(path=>lineFor(id,path,routeStyle(layer,id)))??[]
     })
+    const lanes=assignLanes(routes.map(path=>({route:path.route,kind:path.style.label,points:path.points.map(point=>point.toArray())})))
+    for(const path of routes) path.lane=lanes.get(path.route)??0
+    host.dataset.flowLanes=routes.some(path=>path.lane)?[...lanes].filter(([,lane])=>lane).map(([route,lane])=>route+':'+lane).join(' '):''
+    highlighted=routes.filter(path=>highlight.includes(path.route))
+    contextRoutes=routes.filter(path=>!highlight.includes(path.route))
+    if(highlighted.length) host.dataset.flowHighlight=highlighted[0].route
     host.dataset.flowRoutes=(active??normalRoutes[layer]).join(' ')
   }
   function apply(next:SceneState){
     const old=state
     state=next
-    if(!building||old?.cap!==next.cap||old.inputs.solar!==next.inputs.solar||old.phase!==next.phase){
+    if(!building||old?.cap!==next.cap||old.inputs.solar!==next.inputs.solar||old.phase!==next.phase||old.focus!==next.focus){
       if(building) disposeGeometry(building)
       const animate=old&&next.cap.racks.length>old.cap.racks.length&&next.floor==='ground'&&!motion()
-      building=geometry(next.cap,next.inputs,next.phase,animate?old.cap:undefined)
+      building=geometry(next.cap,next.inputs,next.phase,animate?old.cap:undefined,next.focus)
       installationStart=animate?performance.now():0
       if(installationStart) building.incoming.scale.y=.04
-      world.add(building.exterior,building.stairs,building.ground,building.upper,building.roof)
+      world.add(building.exterior,building.stairs,building.ceilings,building.ground,building.upper,building.roof)
       renderer.shadowMap.needsUpdate=true
     }
     visibleFloor(building,next.floor)
+    if(next.focus){
+      building.stairs.visible=false
+      if(next.layer==='solar'&&next.floor==='roof') building.ground.visible=true
+    }
+    backdrop.position.y=next.focus&&!next.focus.ids.has('reserve')?-.026:-.84
+    if(parked) parked.visible=!next.focus
+    building.ceilings.visible=next.walk
+    walkFill.intensity=next.walk?.55:0
     building.upper.visible=next.walk||next.floor==='upper'
     building.upperBase.visible=!next.walk
     building.upperCutWalls.visible=!next.walk
@@ -329,7 +448,7 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     const selected=activeElement?bounds(activeElement):undefined
     selection.visible=Boolean(selected&&(!selected.floor||selected.floor===next.floor))
     if(selected){
-      selection.material.color.set(next.anchor&&next.layer?routeColors[next.layer]:'#5b9a75')
+      selection.material.color.set(next.anchor&&next.layer?routeStyle(next.layer,next.trace?.route??'').color:'#5b9a75')
       selection.position.set(...selected.at)
       selection.scale.set(selected.size[0],selected.size[2],1)
     }
@@ -345,7 +464,13 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
       backdrop.visible=!next.isolated
       renderer.shadowMap.needsUpdate=true
     }
-    if(old?.layer!==next.layer||old.routes!==next.routes) setRoutes(next.layer,next.routes)
+    const traceChanged=old?.trace?.route!==next.trace?.route||old?.trace?.sequence!==next.trace?.sequence
+    if(!old||old.layer!==next.layer||old.routes!==next.routes||old.emphasis!==next.emphasis||traceChanged)
+      setRoutes(next.layer,next.routes,next.trace?[next.trace.route]:next.emphasis??[])
+    if(traceChanged){
+      flowTime=0
+      wasTracing=false
+    }
     if(!old||old.hour!==next.hour){
       lighting=old&&!motion()?{from:currentHour,to:next.hour,start:performance.now()}:null
       if(!lighting) setLight(next.hour)
@@ -355,18 +480,26 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
       control.touches.ONE=next.tool==='pan'?T.TOUCH.PAN:T.TOUCH.ROTATE
     }
     if(next.active===false){
-      cancelAnimationFrame(frame);frame=0;wasPlaying=false
+      cancelAnimationFrame(frame);frame=0;wasTracing=false
     }
     if(!old||old.economy!==next.economy) configureQuality(next.economy)
     if(next.walk!==old?.walk){
       control.enabled=!next.walk
-      if(next.walk){eye.position.set(13.65,walkingEye,-.98);eye.rotation.set(0,Math.PI/2,0);renderer.domElement.focus()}
-      else{delete host.dataset.walkPosition;keys.clear();if(document.pointerLockElement===renderer.domElement) document.exitPointerLock()}
+      if(next.walk){
+        eye.position.set(visitorArrival.x,walkingEye,visitorArrival.z)
+        eye.rotation.set(0,visitorArrival.yaw,0)
+        renderer.domElement.focus()
+        updateWalkZone()
+      }else{
+        if(walkZoneId!==null){walkZoneId=null;onWalkZone(null)}
+        delete host.dataset.walkPosition;keys.clear()
+        if(document.pointerLockElement===renderer.domElement) document.exitPointerLock()
+      }
     }
     invalidate()
   }
   function snapshot():ModelSnapshot{
-    return {position:camera.position.toArray(),target:control.target.toArray(),angle,zoom:camera.zoom}
+    return {position:camera.position.toArray(),target:control.target.toArray(),zoom:camera.zoom}
   }
   function moveTo(aim:T.Vector3,target:T.Vector3,zoom:number){
     const from=camera.position.clone(),fromTarget=control.target.clone(),fromZoom=camera.zoom
@@ -388,27 +521,59 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
       camera.zoom=T.MathUtils.clamp(camera.zoom*(action.value==='in'?1.24:1/1.24),control.minZoom,control.maxZoom)
       camera.updateProjectionMatrix();invalidate();return
     }
-    if(action.kind==='angle') angle=action.value as Angle
-    if(action.kind==='reset') angle='iso'
+    if(action.kind==='simulation'){
+      const box=new T.Box3()
+      if(action.value==='overview'&&building){
+        for(const group of [building.ground,building.exterior]){
+          group.updateMatrixWorld(true)
+          group.traverseVisible(object=>{
+            if(!(object instanceof T.Mesh)) return
+            const source=object instanceof T.InstancedMesh?object:object.geometry
+            if(!source.boundingBox) source.computeBoundingBox()
+            const local=source.boundingBox
+            if(local&&!local.isEmpty()) box.union(local.clone().applyMatrix4(object.matrixWorld))
+          })
+        }
+      }else{
+        if(action.value!=='equipment') for(const path of highlighted) for(const point of path.points) box.expandByPoint(point)
+        const event=state?.anchor?bounds(state.anchor):undefined
+        if(event){
+          const [x,y,z]=event.at,[w,,d]=event.size
+          box.expandByPoint(new T.Vector3(x-w/2,y,z-d/2))
+          box.expandByPoint(new T.Vector3(x+w/2,y+3,z+d/2))
+        }
+      }
+      if(box.isEmpty()) return
+      const direction=action.value==='overview'?new T.Vector3(...overviewDirection).normalize():camera.position.clone().sub(control.target).normalize()
+      const right=new T.Vector3(0,1,0).cross(direction).normalize()
+      const up=direction.clone().cross(right)
+      const size=box.getSize(new T.Vector3())
+      const extent=(axis:T.Vector3)=>Math.abs(axis.x)*size.x+Math.abs(axis.y)*size.y+Math.abs(axis.z)*size.z
+      const target=box.getCenter(new T.Vector3())
+      const zoom=T.MathUtils.clamp(Math.min(width*.73/Math.max(12,extent(right)),height*.60/Math.max(8,extent(up))),.75,4.6)
+      target.addScaledVector(right,-width*.035/zoom).addScaledVector(up,-height*.035/zoom)
+      moveTo(direction.multiplyScalar(143).add(target),target,zoom)
+      return
+    }
     const selected=action.kind==='focus'&&action.value?bounds(action.value):undefined
     if(action.kind==='focus'&&!selected) return
     const target=selected?new T.Vector3(selected.at[0],selected.at[1]+.64,selected.at[2]):
-      action.kind==='angle'?control.target.clone():state?.floor==='upper'?new T.Vector3(15,4.74,7):new T.Vector3(0,0,0)
-    const zoom=selected?Math.min(10.5,width/selected.radius):action.kind==='angle'?camera.zoom:state?.floor==='upper'?Math.min(4.3,width/24):1
-    const aim=new T.Vector3(...angles[angle]).normalize().multiplyScalar(143).add(target)
+      state?.floor==='upper'?new T.Vector3(15,4.74,7):new T.Vector3(0,0,0)
+    const zoom=selected?Math.min(10.5,width/selected.radius):state?.floor==='upper'?Math.min(4.3,width/24):1
+    const aim=new T.Vector3(...overviewDirection).normalize().multiplyScalar(143).add(target)
     moveTo(aim,target,zoom)
   }
   function pick(event:PointerEvent){
     if(!building||inWalk()||state?.tool==='pan') return
-    const bounds=renderer.domElement.getBoundingClientRect()
-    pointer.set((event.clientX-bounds.left)/bounds.width*2-1,1-(event.clientY-bounds.top)/bounds.height*2)
+    const rect=renderer.domElement.getBoundingClientRect()
+    pointer.set((event.clientX-rect.left)/rect.width*2-1,1-(event.clientY-rect.top)/rect.height*2)
     ray.setFromCamera(pointer,camera)
     const groups=[building.exterior,building.ground,building.upper,building.roof].filter(group=>group.visible)
     const candidates=ray.intersectObjects(groups,true)
     for(const hit of candidates){
       if(!(hit.object instanceof T.InstancedMesh)||hit.instanceId===undefined||renderer.clippingPlanes.some(plane=>plane.distanceToPoint(hit.point)<0)) continue
       const id=(hit.object as Picks).userData.ids?.[hit.instanceId]
-      if(id){onPick(id);return}
+      if(id&&bounds(id)){onPick(id);return}
     }
   }
   function pointerDown(event:PointerEvent){
@@ -459,12 +624,13 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
   window.addEventListener('keydown',keyDown);window.addEventListener('keyup',keyUp);window.addEventListener('blur',blur)
   fit()
   return {apply,action,dispose(){
-    disposed=true;cancelAnimationFrame(frame);clearTimeout(settleTimer);floorFade?.cancel();observer.disconnect();control.dispose();setRoutes(null,null)
+    disposed=true;cancelAnimationFrame(frame);clearTimeout(settleTimer);floorFade?.cancel();observer.disconnect();control.dispose();setRoutes(null,null,[])
     hud?.removeEventListener('toggle',invalidate,true)
     if(document.pointerLockElement===canvas) document.exitPointerLock()
     window.removeEventListener('pointerup',pointerUp);window.removeEventListener('pointermove',pointerMove)
     window.removeEventListener('keydown',keyDown);window.removeEventListener('keyup',keyUp);window.removeEventListener('blur',blur)
     if(building) disposeGeometry(building)
+    if(parked) disposeGroup(parked)
     selection.geometry.dispose();selection.material.dispose()
     backdrop.geometry.dispose();backdrop.material.dispose();sun.shadow.dispose()
     renderer.dispose();renderer.forceContextLoss();canvas.remove();flowCanvas.remove()

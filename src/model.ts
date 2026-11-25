@@ -23,7 +23,16 @@ export const property = {
 }
 
 export const parcelVerified=Boolean(property.confidence==='parcelle'&&property.parcelAnchor&&(property.cadastralBoundary?.length??0)>=3)
+export const accessVestibule={
+  rect:[17.32,2.14,2.68,2.12] as Rect,axis:3.2,innerDoor:1.38,outerDoor:1.7,
+}
 export const stairs={x:18.4,lowZ:11,run:.26,steps:20,width:1.72,opening:[17.4,5.94,2,5.28] as Rect}
+export const parking={firstLine:-18,bayWidth:2.52,bayCount:8,bayDepth:5.12,z:16.65,surfaceY:.035}
+export const visitorArrival={
+  x:parking.firstLine+(parking.bayCount-2)*parking.bayWidth,
+  z:parking.z+parking.bayDepth/2-.16,
+  yaw:-Math.PI/2,
+}
 const [upperX,upperZ,upperW,upperD]=property.upper
 const [shaftX,shaftZ,shaftW,shaftD]=stairs.opening
 export const upperSlabs:Rect[]=[
@@ -32,12 +41,19 @@ export const upperSlabs:Rect[]=[
   [upperX,shaftZ,shaftX-upperX,shaftD],
   [shaftX+shaftW,shaftZ,upperX+upperW-shaftX-shaftW,shaftD],
 ]
-export function walkHeight(x:number,z:number,current:number){
+function contains(rect:Rect,x:number,z:number,inset=0){
+  const [left,front,width,depth]=rect
+  return x>=left+inset&&x<=left+width-inset&&z>=front+inset&&z<=front+depth-inset
+}
+function stairHeight(x:number,z:number){
   const progress=(stairs.lowZ+stairs.run/2-z)/(stairs.steps*stairs.run)
-  if(Math.abs(x-stairs.x)<stairs.width/2&&progress>=0&&progress<=1) return progress*property.technicalHeight
+  return Math.abs(x-stairs.x)<stairs.width/2&&progress>=0&&progress<=1?progress*property.technicalHeight:null
+}
+export function walkHeight(x:number,z:number,current:number){
+  const step=stairHeight(x,z)
+  if(step!==null) return step
   if(current<property.technicalHeight-.22) return 0
-  const onSlab=upperSlabs.some(([left,front,width,depth])=>x>=left&&x<=left+width&&z>=front&&z<=front+depth)
-  return onSlab?property.technicalHeight:null
+  return upperSlabs.some(rect=>contains(rect,x,z))?property.technicalHeight:null
 }
 
 export type Room = {
@@ -45,21 +61,43 @@ export type Room = {
   color: string; description: string; details: string; layer?: Layer; cost?: string
 }
 export const rooms: Room[] = [
-  {id:'hall-a',name:'Salle serveurs A',short:'Salle A',rect:[-20,-12.5,15,10],floor:'ground',color:'#d2ddd7',description:'Les serveurs de cette salle font tourner les machines virtuelles et conservent une partie des données. L’air froid arrive entre les rangées de baies et traverse les serveurs.',details:'24 emplacements prévus. Les baies installées sont raccordées à deux circuits électriques A/B et à deux chemins réseau.',layer:'compute',cost:'rack'},
-  {id:'hall-b',name:'Salle serveurs B',short:'Salle B',rect:[-5,-12.5,15,10],floor:'ground',color:'#cdd9d7',description:'La deuxième salle sépare physiquement une partie du calcul et du stockage. Chaque salle dispose de sa propre distribution de refroidissement.',details:'La perte d’une salle entière reste un scénario à valider. Les groupes de disques sont répartis entre plusieurs serveurs.',layer:'storage',cost:'rack'},
-  {id:'power',name:'Local électrique',short:'Électricité',rect:[-20,.5,13,10],floor:'ground',color:'#e5d9be',description:'Les armoires distribuent l’électricité aux baies. En cas de coupure, les onduleurs utilisent leurs batteries pendant le démarrage des groupes électrogènes.',details:'Deux voies A/B. L’arrivée publique, le transfert amont et le stockage de carburant communs restent des points de défaillance à étudier.',layer:'power',cost:'ups'},
-  {id:'cooling',name:'Local de refroidissement',short:'Refroidissement',rect:[-7,.5,9,10],floor:'ground',color:'#c8dde0',description:'Depuis ce local, on surveille le refroidissement des salles. Les climatiseurs de précision en périphérie soufflent vers le plancher puis reprennent l’air chaud en hauteur.',details:'Climatisation à détente directe (DX). Des condenseurs extérieurs rejettent la chaleur. Une unité de réserve est prévue dans chaque salle.',layer:'air',cost:'crac'},
-  {id:'delivery',name:'Livraison et maintenance',short:'Livraison',rect:[2,.5,7,10],floor:'ground',color:'#e4dbcb',description:'Les équipements arrivent par un accès distinct. Ils sont déballés, vérifiés et préparés avant d’entrer en salle informatique.',details:'Le couloir central relie l’atelier aux salles. Le rayon de manœuvre des véhicules lourds et la portance du sol restent à vérifier.'},
-  {id:'network',name:'Local réseau et fibre',short:'Réseau',rect:[10,-6.5,10,4],floor:'ground',color:'#d7d3e4',description:'Les fibres des opérateurs arrivent dans cette salle. Les routeurs choisissent un chemin. Les pare-feu filtrent le trafic avant son arrivée aux serveurs.',details:'Deux armoires réseau distinctes des 48 emplacements informatiques. Deux opérateurs et deux parcours d’entrée à confirmer sur place.',layer:'network',cost:'network'},
+  {id:'hall-a',name:'Salle serveurs A',short:'Salle A',rect:[-20,-12.5,15,10],floor:'ground',color:'#d2ddd7',description:'Les serveurs de cette salle font tourner les machines virtuelles et conservent une partie des données. L’air froid arrive entre les rangées de baies et traverse les serveurs.',details:'24 emplacements de baie. Les baies installées sont raccordées à deux circuits électriques A/B et à deux chemins réseau.',layer:'compute',cost:'rack'},
+  {id:'hall-b',name:'Salle serveurs B',short:'Salle B',rect:[-5,-12.5,15,10],floor:'ground',color:'#cdd9d7',description:'La deuxième salle sépare physiquement une partie du calcul et du stockage. Chaque salle dispose de sa propre distribution de refroidissement.',details:'Le plan de haute disponibilité organise la reprise des machines virtuelles dans la salle qui reste en service. Le cluster utilise le quorum et les copies de données réparties entre les deux salles.',layer:'storage',cost:'rack'},
+  {id:'power',name:'Local électrique',short:'Électricité',rect:[-20,.5,13,10],floor:'ground',color:'#e5d9be',description:'Les armoires distribuent l’électricité aux baies. En cas de coupure, les onduleurs utilisent leurs batteries pendant le démarrage des groupes électrogènes.',details:'Les voies A et B distribuent le courant séparément aux équipements à double alimentation.',layer:'power',cost:'ups'},
+  {id:'cooling',name:'Local de refroidissement',short:'Refroidissement',rect:[-7,.5,9,10],floor:'ground',color:'#c8dde0',description:'Depuis ce local, on surveille le refroidissement des salles. Les climatiseurs de précision en périphérie soufflent vers le plancher puis reprennent l’air chaud en hauteur.',details:'Climatisation à détente directe (DX). Des condenseurs extérieurs rejettent la chaleur. Une unité de réserve par salle prend le relais en cas de panne.',layer:'air',cost:'crac'},
+  {id:'delivery',name:'Livraison et maintenance',short:'Livraison',rect:[2,.5,7,10],floor:'ground',color:'#e4dbcb',description:'Les équipements arrivent par un accès distinct. Ils sont déballés, vérifiés et préparés avant d’entrer en salle informatique.',details:'Le couloir central relie l’atelier aux salles. Les rayonnages et l’établi laissent ce passage libre.'},
+  {id:'network',name:'Local réseau et fibre',short:'Réseau',rect:[10,-6.5,10,4],floor:'ground',color:'#d7d3e4',description:'Les fibres des opérateurs arrivent dans cette salle. Les routeurs choisissent un chemin. Les pare-feu filtrent le trafic avant son arrivée aux serveurs.',details:'Deux parcours de fibre relient les entrées des opérateurs au cœur réseau des salles A et B.',layer:'network',cost:'network'},
   {id:'noc',name:'Supervision du réseau',short:'Supervision',rect:[10,-12.5,7.5,6],floor:'ground',color:'#cbd5dc',description:'Cette salle sert à surveiller les équipements et les alertes du site. Le NOC suit le réseau et le SOC suit les alertes de sécurité informatique.',details:'Consoles, écrans de supervision et suivi des alarmes techniques.'},
   {id:'reception',name:'Accueil et contrôle d’accès',short:'Accueil',rect:[10,.5,10,5],floor:'ground',color:'#e2d5bd',description:'Les visiteurs se présentent à l’accueil. Un sas à deux portes et des lecteurs de badge limitent l’accès aux zones techniques.',details:'Caméras, clôture et contrôle des véhicules complètent la protection du site.',cost:'security'},
   {id:'utility',name:'Locaux de service',short:'Services',rect:[10,5.5,7,5],floor:'ground',color:'#d8ddd4',description:'Ces locaux regroupent les services du bâtiment et le matériel d’intervention.',details:'La détection de fuite alerte avant que l’eau n’atteigne les équipements électriques.'},
-  {id:'offices',name:'Bureaux de direction',short:'Bureaux',rect:[10,.5,5,4],floor:'upper',color:'#e8dabc',description:'Bureaux du premier étage de l’aile administrative.',details:'Surface de l’étage à confirmer avec l’architecte.'},
+  {id:'offices',name:'Bureaux de direction',short:'Bureaux',rect:[10,.5,5,4],floor:'upper',color:'#e8dabc',description:'Bureaux du premier étage de l’aile administrative.',details:'Le palier relie les bureaux à la salle de réunion.'},
   {id:'meeting',name:'Salle de réunion',short:'Réunion',rect:[15,.5,5,4],floor:'upper',color:'#ded7be',description:'L’espace sert aux réunions de projet et aux interventions coordonnées.',details:'Accès par l’escalier de l’aile administrative.'},
   {id:'shared',name:'Espace de travail',short:'Espace de travail',rect:[10,5.8,7,3.8],floor:'upper',color:'#d3ddcf',description:'Postes de travail partagés dans l’aile administrative.',details:'Étage séparé des salles techniques.'},
   {id:'break',name:'Salle de pause',short:'Salle de pause',rect:[10,9.6,4,2.9],floor:'upper',color:'#dfd6c1',description:'Espace de pause du premier étage.',details:'Les sanitaires sont voisins du palier.'},
   {id:'restroom',name:'Sanitaires',short:'Sanitaires',rect:[14,9.6,3,2.9],floor:'upper',color:'#d3d9d3',description:'Sanitaires de l’étage administratif.',details:'Les réseaux d’eau sont tenus à l’écart des salles informatiques.'},
 ]
+export type WalkZone={id:string;name:string;level:string}
+const outsideZones:{id:string;name:string;rect:Rect}[]=[
+  {id:'reserve',name:'Réserve d’extension',rect:property.reserve},
+  {id:'gate',name:'Entrée du site',rect:[21.5,11.9,6.7,9.35]},
+  {id:'parking',name:'Stationnement',rect:[-18.1,14.09,20.2,5.16]},
+  {id:'loading',name:'Aire de livraison',rect:[2.1,11.9,7,7.9]},
+  {id:'service-yard',name:'Cour des équipements',rect:[-28,-12.85,7.6,25.65]},
+  {id:'cooling-yard',name:'Cour des condenseurs',rect:[-21,-19.9,26.1,6.6]},
+]
+export function walkZoneAt(x:number,z:number,elevation:number):WalkZone{
+  const flight=stairHeight(x,z)
+  if(flight!==null&&Math.abs(elevation-flight)<.22) return {id:'stairs',name:'Escalier',level:'Entre les deux niveaux'}
+  const upper=elevation>=property.technicalHeight-.22
+  const level=upper?'Premier étage':'Rez-de-chaussée'
+  if(!upper&&contains(accessVestibule.rect,x,z,.08)) return {id:'vestibule',name:'Sas d’accès',level}
+  const room=rooms.find(item=>item.floor===(upper?'upper':'ground')&&contains(item.rect,x,z,.1))
+  if(room) return {id:room.id,name:room.name,level}
+  if(upper) return {id:'upper-corridor',name:'Palier et circulation',level}
+  if(contains(property.building,x,z)) return {id:'ground-corridor',name:'Couloir principal',level}
+  const outside=outsideZones.find(item=>contains(item.rect,x,z))
+  return {id:outside?.id??'site',name:outside?.name??'Circulation extérieure',level:'Extérieur'}
+}
 export const area = ([, , width, depth]: Rect) => width * depth
 export const center = ([x,z,w,d]: Rect): Point => [x+w/2,0,z+d/2]
 export const landArea = Math.abs(property.boundary.reduce((sum, [x,z], i, points) => {
@@ -77,7 +115,7 @@ export const specs = {
   electrical: {transformer:[315,500,630], generatorKW:200, upsKW:120, minutes:10, fuelHours:12, fuelLPerHour:48, dieselMAD:12.5, exerciseHours:24, pduVoltage:230},
   thermal: {netUnitKW:32, designMultiplier:1.12, supply:24, return:34},
   network: {internetMin:1,internetMax:10,host:25,storage:25,uplink:100,cabinets:2},
-  solar: {yield:1750, selfUse:.9, moduleWatts:500, moduleWidth:1.12, moduleDepth:2.1},
+  solar: {yield:1738, selfUse:.9, moduleWatts:500, moduleWidth:1.12, moduleDepth:2.1},
 }
 
 export const phases = {
@@ -92,6 +130,8 @@ export const hallInfrastructure=(['hall-a','hall-b'] as const).map((id,index)=>{
   return {id,suffix,x,z,crac:[x+w-.71,0,z+1.02] as Point,pdu:[x+.65,0,z+6.6] as Point,
     condenser:[x+1.25,0,-17.75] as Point,temperature:[x+2.3,0,z+2.7] as Point}
 })
+// The first three units exist in both halls from phase 1.
+export const coolingCircuitSuffixes=['','Surviving','Reserve'] as const
 
 export const equipment = [
   {id:'transformer',name:'Transformateur',position:[-24,0,-8],kind:'transformer',layer:'power',cost:'switchgear', description:'Abaisse la tension du réseau public avant sa distribution dans le site.'},
@@ -107,17 +147,17 @@ export const equipment = [
       {id:'temperature'+suffix,name:name('Sonde de température'),position:hall.temperature,kind:'sensor',layer:'air' as const,cost:'crac',description:'La sonde mesure l’air à l’entrée des serveurs et signale une hausse anormale.'},
     ]
   }),
-  {id:'ups',name:'Onduleurs et batteries',position:[-15.8,0,6.8],kind:'ups',layer:'power',cost:'ups',description:'Les batteries maintiennent provisoirement l’alimentation pendant le démarrage des groupes électrogènes.'},
-  {id:'switchgear',name:'Armoires de distribution',position:[-15.8,0,2],kind:'panel',layer:'power',cost:'switchgear',description:'Les armoires protègent les circuits et distribuent la puissance aux onduleurs et aux équipements essentiels.'},
+  {id:'ups',name:'Onduleurs et batteries',position:[-18.7,0,6.8],kind:'ups',layer:'power',cost:'ups',description:'Les batteries maintiennent provisoirement l’alimentation pendant le démarrage des groupes électrogènes.'},
+  {id:'switchgear',name:'Armoires de distribution',position:[-15.29,0,2],kind:'panel',layer:'power',cost:'switchgear',description:'Les armoires protègent les circuits et distribuent la puissance aux onduleurs et aux équipements essentiels.'},
   {id:'router',name:'Routeurs et pare-feu',position:[14.4,0,-5.5],kind:'router',layer:'network',cost:'network',description:'Les routeurs sélectionnent le chemin du trafic. Les pare-feu appliquent les règles d’accès aux services.'},
   {id:'fiber',name:'Tiroirs de raccordement fibre',position:[17.2,0,-5.5],kind:'router',layer:'network',cost:'cabling',description:'Les tiroirs connectent physiquement les fibres extérieures aux équipements du centre de données.'},
   {id:'core',name:'Commutation du cœur réseau',position:[12.25,0,-5.5],kind:'router',layer:'network',cost:'network',description:'Le cœur réseau dessert les baies des deux salles et transporte les échanges entre serveurs.'},
   {id:'solar',name:'Panneaux photovoltaïques',position:[-4,4.65,-.5],kind:'solar',layer:'solar',cost:'solar',description:'La production solaire alimente une partie des besoins en journée. Les batteries des onduleurs et les groupes ont une fonction de secours distincte.'},
   {id:'inverter',name:'Onduleur photovoltaïque',position:[-7.35,0,2],kind:'panel',layer:'solar',cost:'solar',description:'Convertit la production des panneaux en courant alternatif injecté dans le tableau du site.'},
   {id:'security',name:'Contrôle des véhicules',position:[25,0,16],kind:'security',cost:'security',description:'La barrière filtrée dirige les visiteurs vers l’accueil et les livraisons vers leur accès réservé.'},
-  {id:'fire',name:'Détection et extinction incendie',position:[-19.3,0,-3.6],kind:'fire',cost:'fire',description:'Une détection précoce par aspiration surveille les salles. L’extinction à agent propre, la décompression et les procédures d’évacuation devront être étudiées ensemble.'},
+  {id:'fire',name:'Détection et extinction incendie',position:[-18.92,0,-3.62],kind:'fire',cost:'fire',description:'La détection par aspiration surveille l’air des salles. Le système d’extinction diffuse un agent propre dans la zone protégée.'},
   {id:'leak',name:'Détection de fuite',position:[-5.8,0,5],kind:'sensor',layer:'air',cost:'security',description:'Une sonde au sol signale une fuite près des équipements de froid.'},
-  {id:'camera',name:'Caméra de périmètre',position:[27.3,0,11.5],kind:'camera',cost:'security',description:'Les caméras couvrent les accès avec un champ de vision à valider et des règles de conservation des images à définir.'},
+  {id:'camera',name:'Caméra de périmètre',position:[27.3,0,11.5],kind:'camera',cost:'security',description:'Les caméras surveillent les entrées du site et les accès au bâtiment.'},
 ] satisfies {id:string;name:string;position:Point;kind:string;layer?:Layer;cost:string;description:string}[]
 export type Equipment = (typeof equipment)[number]
 
@@ -142,98 +182,146 @@ export const rackPositions = ['hall-a','hall-b'].flatMap((hall,h) => {
 export type Rack = (typeof rackPositions)[number]
 
 
-export const services = [
-  {id:'vps',name:'Serveur virtuel (VPS)',unit:'machine / mois',price:159,example:'Mettre en ligne un site ou une petite application.', future:false},
-  {id:'dedicated',name:'Serveur dédié',unit:'serveur / mois',price:2400,example:'Réserver une machine physique à une seule entreprise.',future:false},
-  {id:'object',name:'Stockage objet S3',unit:'To / mois',price:180,example:'Archiver des images et des documents accessibles à la demande.',future:false},
-  {id:'backup',name:'Sauvegarde à la demande',unit:'To / mois',price:230,example:'Restaurer des fichiers après un effacement ou une panne.',future:false},
-  {id:'private',name:'Nuage privé',unit:'lot / mois',price:5200,example:'Séparer les applications internes d’une organisation.',future:false},
-  {id:'db',name:'Bases de données gérées',unit:'',price:0,example:'Confier les mises à jour et la sauvegarde des bases.',future:true},
-  {id:'colo',name:'Colocation',unit:'',price:0,example:'Installer son propre matériel dans des baies hébergées.',future:true},
-  {id:'gpu',name:'Calcul accéléré (GPU)',unit:'',price:0,example:'Exécuter des traitements intensifs comme l’entraînement de modèles.',future:true},
-  {id:'k8s',name:'Kubernetes géré',unit:'',price:0,example:'Déployer et mettre à jour des applications en conteneurs.',future:true},
-]
+// Each terminal is shared with its equipment mesh.
+export const technicalPorts:Record<string,Point>={
+  grid:[-26.45,1.42,-11.74],transformer:[-24.66,2.633,-8],transformerExit:[-22.58,1.12,-8],
+  generator:[-21.66,1.16,-3.8],powerEntry:[-20.13,.54,2],
+  transfer:[-18.8,2.49,2],switchgear:[-15.29,2.49,2],coolingBoard:[-14.12,2.49,2],
+  upsInput:[-18.87,2.49,6.8],ups:[-18.54,2.49,6.8],battery:[-13.5,2.39,6.8],
+  ispA:[22.8,.14,-10.9],ispB:[22.8,.14,1.02],
+  fiber:[17.2,2.34,-5.5],fiberJackB:[17.2,2.34,-5.31],
+  router:[14.4,2.34,-5.5],routerOut:[14.21,2.34,-5.5],core:[12.25,2.34,-5.5],
+  solar:[-18.9,property.technicalHeight+.41,-12.32],inverter:[-7.35,1.81,2],
+}
 
 export const coordinates:Record<string,Point>={
-  ...Object.fromEntries(equipment.map(item=>[item.id,item.position])),
-  grid:[-27,1.65,-12],gridEntry:[-24,1.65,-12],transformerExit:[-22.2,1.5,-8],
-  powerEntry:[-20.15,2.7,2],transfer:[-19.1,1.5,2],upsInput:[-15.8,2.65,6.8],
-  busA:[-15.8,2.65,-1.44],busB:[-15.8,2.65,-.38],battery:[-13.1,1.35,6.8],
-  ispA:[25,1.65,-10],ispB:[25,1.65,1],fiberNorth:[22,2.7,-9.8],fiberSouth:[22,2.45,-2.15],
-  fiberDropA:[17.2,2.7,-9.8],fiberDropB:[17.2,2.45,-2.15],
-  coreTray:[12.25,2.58,-1.9],crossTray:[-1,2.58,-1.9],
-  solarRoof:[-3,4.65,1.2],solarRiser:[-7.35,4.4,2],
-  coolingBoard:[-9,2.85,2],
+  gridEntry:[-26.45,2.633,-11.74],gridCorner:[-24.66,2.633,-11.74],
+  transformerDrop:[-22.58,.54,-8],generatorDrop:[-21.66,.54,-3.8],
+  yardFeed:[-21.38,.54,-8],generatorJoin:[-21.38,.54,-3.8],yardTurn:[-21.38,.54,2],
+  transferRiser:[-18.8,.54,2],upsOverhead:[-18.87,2.68,6.8],switchgearOverhead:[-15.29,2.68,2],
+  // The UPS feed leaves the switchgear on its own tray so it never retraces the transfer cable.
+  upsFeedTurn:[-15.29,2.68,5.6],upsFeedWest:[-19.4,2.68,5.6],upsFeedEntry:[-19.4,2.68,6.8],batteryRiser:[-13.5,2.66,6.8],upsBattery:[-18.87,2.66,6.8],
+  upsMain:[-18.54,2.76,6.8],busA:[-18.54,2.76,-1.43],busB:[-18.54,2.76,-.68],
+  fiberWallA:[20.16,.14,-10.9],fiberWallB:[20.16,.14,1.02],fiberRiserA:[20.16,2.72,-10.9],
+  fiberRiserB:[20.16,2.57,1.02],fiberCornerA:[20.16,2.72,-5.5],fiberCornerB:[20.16,2.57,-5.31],
+  fiberInA:[17.2,2.72,-5.5],fiberInB:[17.2,2.57,-5.31],
+  fiberTray:[17.2,2.52,-5.5],edgeTray:[14.4,2.52,-5.5],edgeOut:[14.21,2.52,-5.5],coreTop:[12.25,2.52,-5.5],
+  coreLift:[12.25,2.58,-5.5],coreTray:[12.25,2.58,-1.9],crossTray:[-1.56,2.58,-1.9],
+  solarAlongRoof:[-7.35,property.technicalHeight+.41,-12.32],solarRiser:[-7.35,property.technicalHeight+.41,2],
+  inverterLift:[-7.35,2.49,2],coolingLift:[-14.12,2.94,2],
 }
 for(const hall of hallInfrastructure){
-  const {id,suffix:s,x,z,crac,pdu,condenser}=hall
-  const compute=rackPositions.find(rack=>rack.hall===id&&rack.purpose==='Calcul')!.position
-  const storage=rackPositions.find(rack=>rack.hall===id&&rack.purpose==='Stockage NVMe')!.position
-  const hdd=rackPositions.find(rack=>rack.hall===id&&rack.purpose==='Stockage HDD')!.position
-  const backup=rackPositions.find(rack=>rack.hall===id&&rack.purpose==='Sauvegarde')!.position
+  const {id,suffix:s,z,crac,pdu,condenser}=hall
+  const rack=(use:RackUse)=>rackPositions.find(rack=>rack.hall===id&&rack.purpose===use)!
+  const compute=rack('Calcul')
+  const [rx,,rz]=compute.position,[cx,,cz]=crac,[px,,pz]=pdu,[kx,,kz]=condenser
+  for(const [key,item] of [['compute',compute],['storage',rack('Stockage NVMe')],['hdd',rack('Stockage HDD')],['backup',rack('Sauvegarde')]] as const){
+    const [x,,rackZ]=item.position
+    technicalPorts[key+s]=[x,2.40,rackZ]
+    coordinates[key+'Tray'+s]=[x,2.58,rackZ]
+    coordinates[key+'Branch'+s]=[x,2.58,-1.9]
+  }
+  for(const [feed,offset,sign,busZ] of [['A',0,-1,-1.43],['B',.7,1,-.68]] as const){
+    const x=px+offset,end=rx+sign*.183
+    const trayZ=rz+sign*.08,pduSide=pz+sign*.124,height=feed==='A'?2.71:2.84
+    technicalPorts['pdu'+s+feed]=[x,1.91,pduSide]
+    technicalPorts['pduOut'+s+feed]=[x,1.91,pz]
+    technicalPorts['powerDrop'+s+feed]=[end,2.40,rz]
+    Object.assign(coordinates,{
+      ['riser'+s+feed]:[x,2.76,busZ],['tray'+s+feed]:[x,2.76,pduSide],
+      ['pduLift'+s+feed]:[x,height,pz],['powerTray'+s+feed]:[x,height,trayZ],
+      ['powerBranch'+s+feed]:[end,height,trayZ],['powerEnd'+s+feed]:[end,height,rz],
+    })
+  }
+  const front=specs.rack.depth/2
+  const inletZ=rz+compute.front*(front+.061),exhaustZ=rz-compute.front*(front+.054)
+  const coldZ=z+2.72,hotZ=exhaustZ-.31
+  Object.assign(technicalPorts,{
+    ['cracFeed'+s]:[cx,2.51,cz+.175],
+    ['intake'+s]:[rx,1.20,inletZ],['rackRear'+s]:[rx,1.46,exhaustZ],
+  })
   Object.assign(coordinates,{
-    ['compute'+s]:[compute[0],1.35,compute[2]],['storage'+s]:[storage[0],1.35,storage[2]],
-    ['hdd'+s]:[hdd[0],1.35,hdd[2]],['hddTray'+s]:[hdd[0],2.58,hdd[2]],
-    ['backup'+s]:[backup[0],1.35,backup[2]],['backupTray'+s]:[backup[0],2.58,backup[2]],
-    ['computeTray'+s]:[compute[0],2.58,compute[2]],['storageTray'+s]:[storage[0],2.58,storage[2]],
-    ['networkEntry'+s]:[compute[0],2.58,-1.9],['networkBranch'+s]:[storage[0],2.58,-1.9],
-    ['pdu'+s+'A']:[pdu[0],1.22,pdu[2]],['pdu'+s+'B']:[pdu[0]+.7,1.22,pdu[2]],
-    ['riser'+s+'A']:[pdu[0],2.65,-1.44],['riser'+s+'B']:[pdu[0]+.7,2.65,-.38],
-    ['tray'+s+'A']:[pdu[0],2.65,pdu[2]],['tray'+s+'B']:[pdu[0]+.7,2.65,pdu[2]],
-    ['powerDrop'+s+'A']:[compute[0]-.15,2.65,compute[2]],['powerDrop'+s+'B']:[compute[0]+.15,2.65,compute[2]],
-    ['crac'+s]:[crac[0],1.18,crac[2]],['plenum'+s]:[crac[0],.09,crac[2]],
-    ['underfloor'+s]:[x+3.05,.09,z+2.7],['cold'+s]:[x+3.05,1.22,z+2.7],
-    ['rackRear'+s]:[compute[0],1.49,compute[2]-.56],['warm'+s]:[compute[0],3.12,compute[2]-.76],
-    ['return'+s]:[crac[0],3.12,crac[2]],['roofPipe'+s]:[crac[0],2.92,-15.8],
-    ['condenser'+s]:[condenser[0],1.24,condenser[2]],['liquid'+s]:[condenser[0]+.33,1.24,condenser[2]],
-    ['liquidPipe'+s]:[crac[0]+.33,2.76,-15.8],['liquidEntry'+s]:[crac[0]+.33,2.76,crac[2]],
-    ['cracFeed'+s]:[crac[0],2.85,crac[2]],['coolingCross'+s]:[crac[0],2.85,2],
+    ['airAcross'+s]:[cx,.108,coldZ],['underfloor'+s]:[rx,.108,coldZ],['cold'+s]:[rx,1.20,coldZ],
+    ['warmExit'+s]:[rx,1.46,hotZ],['warm'+s]:[rx,2.94,hotZ],
+    ['return'+s]:[cx,2.94,hotZ],
+    ['coolingCross'+s]:[cx,2.94,2],['coolingDrop'+s]:[cx,2.94,cz+.175],
+  })
+  coolingCircuitSuffixes.forEach((mode,index)=>{
+    const unit=s+mode,vent=cz+index*1.21+.365,takeoff=vent-.555
+    const condenserPort=kx+index*2.36+1.19,hotPipeX=cx+.19,liquidPipeX=cx-.19
+    Object.assign(technicalPorts,{
+      ['cracSupply'+unit]:[cx,.36,vent],['cracReturn'+unit]:[cx,2.12,vent],
+      ['cracRefrigerant'+unit]:[hotPipeX,2.51,takeoff],['cracLiquid'+unit]:[liquidPipeX,2.51,takeoff],
+      ['condenser'+unit]:[condenserPort,.94,kz-.30],['liquid'+unit]:[condenserPort,.62,kz+.30],
+    })
+    Object.assign(coordinates,{
+      ['plenum'+unit]:[cx,.108,vent],['returnElbow'+unit]:[cx,2.94,vent],
+      ['hotRiser'+unit]:[hotPipeX,2.68,takeoff],['roofPipe'+unit]:[hotPipeX,2.68,-14.05],
+      ['hotAcross'+unit]:[condenserPort,2.68,-14.05],['hotDrop'+unit]:[condenserPort,.94,-14.05],
+      ['liquidTurn'+unit]:[condenserPort,.62,-13.65],['liquidLift'+unit]:[condenserPort,2.48,-13.65],
+      ['liquidPipe'+unit]:[liquidPipeX,2.48,-13.65],['liquidEntry'+unit]:[liquidPipeX,2.48,takeoff],
+    })
   })
 }
+Object.assign(coordinates,technicalPorts)
 
-type Route={paths:string[][];tone?:'warm'|'refrigerant'|'grid'|'reduced'}
+type Route={paths:string[][];tone?:'warm'|'refrigerant'|'reduced'}
 const route=(...paths:string[][]):Route=>({paths})
+const switchgearToUps=['switchgear','switchgearOverhead','upsFeedTurn','upsFeedWest','upsFeedEntry','upsOverhead','upsInput']
+const supplyToUps=['powerEntry','transferRiser','transfer',...switchgearToUps]
 const powerRoutes={
-  grid:route(['grid','gridEntry','transformer','transformerExit','powerEntry','transfer','switchgear','upsInput','ups']),
-  generator:route(['generator','powerEntry','transfer','switchgear','upsInput','ups']),
-  battery:route(['battery','ups']),
-  racks:route(...hallInfrastructure.flatMap(({suffix:s})=>['A','B'].map(feed=>
-    ['ups','bus'+feed,'riser'+s+feed,'tray'+s+feed,'pdu'+s+feed,'tray'+s+feed,'powerDrop'+s+feed,'compute'+s],
-  ))),
-  cooling:route(['switchgear','coolingBoard'],...hallInfrastructure.map(({suffix:s})=>['coolingBoard','coolingCross'+s,'cracFeed'+s,'crac'+s])),
+  grid:route(
+    ['grid','gridEntry','gridCorner','transformer'],
+    ['transformerExit','transformerDrop','yardFeed','generatorJoin','yardTurn',...supplyToUps],
+  ),
+  generator:route(['generator','generatorDrop','generatorJoin','yardTurn',...supplyToUps]),
+  battery:route(['battery','batteryRiser','upsBattery','upsInput']),
+  racks:route(...hallInfrastructure.flatMap(({suffix:s})=>['A','B'].flatMap(feed=>[
+    ['ups','upsMain','bus'+feed,'riser'+s+feed,'tray'+s+feed,'pdu'+s+feed],
+    ['pduOut'+s+feed,'pduLift'+s+feed,'powerTray'+s+feed,'powerBranch'+s+feed,'powerEnd'+s+feed,'powerDrop'+s+feed],
+  ]))),
+  cooling:route(...hallInfrastructure.map(({suffix:s})=>['coolingBoard','coolingLift','coolingCross'+s,'coolingDrop'+s,'cracFeed'+s])),
 }
-const coolingRoutes=Object.fromEntries(hallInfrastructure.flatMap(({suffix:s})=>[
-  ['supply'+s,route(['crac'+s,'plenum'+s,'underfloor'+s,'cold'+s,'compute'+s])],
-  ['return'+s,{paths:[['compute'+s,'rackRear'+s,'warm'+s,'return'+s,'crac'+s]],tone:'warm'}],
-  ['refrigerant'+s,{paths:[['crac'+s,'return'+s,'roofPipe'+s,'condenser'+s],['liquid'+s,'liquidPipe'+s,'liquidEntry'+s,'crac'+s]],tone:'refrigerant'}],
-  ['reduced'+s,{paths:[['crac'+s,'plenum'+s,'underfloor'+s,'cold'+s,'compute'+s]],tone:'reduced'}],
-])) as Record<string,Route>
+const coolingRoutes=Object.fromEntries(hallInfrastructure.flatMap(({suffix:s})=>coolingCircuitSuffixes.flatMap(mode=>{
+  const unit=s+mode
+  const floorSupply=['airAcross'+s,'underfloor'+s,'cold'+s,'intake'+s]
+  const supply=route(['cracSupply'+unit,'plenum'+unit,...floorSupply])
+  if(mode==='Surviving') supply.tone='reduced'
+  return [
+    [mode==='Surviving'?'reduced'+s:'supply'+unit,supply],
+    ['return'+unit,{paths:[['rackRear'+s,'warmExit'+s,'warm'+s,'return'+s,'returnElbow'+unit,'cracReturn'+unit]],tone:'warm'}],
+    ['refrigerant'+unit,{paths:[
+      ['cracRefrigerant'+unit,'hotRiser'+unit,'roofPipe'+unit,'hotAcross'+unit,'hotDrop'+unit,'condenser'+unit],
+      ['liquid'+unit,'liquidTurn'+unit,'liquidLift'+unit,'liquidPipe'+unit,'liquidEntry'+unit,'cracLiquid'+unit],
+    ],tone:'refrigerant'}],
+  ]
+}))) as Record<string,Route>
 const distribution={
-  hallA:route(['core','coreTray','crossTray','networkEntryA','computeTrayA','computeA']),
-  hallB:route(['core','coreTray','networkEntryB','computeTrayB','computeB']),
+  hallA:route(['core','coreLift','coreTray','computeBranchA','computeTrayA','computeA']),
+  hallB:route(['core','coreLift','coreTray','computeBranchB','computeTrayB','computeB']),
 }
 export const topology:Record<Layer,Record<string,Route>>={
   power:powerRoutes,
   air:coolingRoutes,
   network:{
-    ispA:route(['ispA','fiberNorth','fiberDropA','fiber']),
-    ispB:route(['ispB','fiberSouth','fiberDropB','fiber']),
-    core:route(['fiber','router','core']),
+    ispA:route(['ispA','fiberWallA','fiberRiserA','fiberCornerA','fiberInA','fiber']),
+    ispB:route(['ispB','fiberWallB','fiberRiserB','fiberCornerB','fiberInB','fiberJackB']),
+    core:route(['fiber','fiberTray','edgeTray','router'],['routerOut','edgeOut','coreTop','core']),
     ...distribution,
   },
   storage:{
-    accessA:route(['computeA','computeTrayA','networkEntryA','networkBranchA','storageTrayA','storageA']),
-    accessB:route(['computeB','computeTrayB','networkEntryB','networkBranchB','storageTrayB','storageB']),
-    remoteB:route(['computeA','computeTrayA','networkEntryA','crossTray','networkBranchB','storageTrayB','storageB']),
-    replica:route(['storageA','storageTrayA','networkBranchA','crossTray','networkBranchB','storageTrayB','storageB']),
-    rebuild:route(['storageB','storageTrayB','networkBranchB','crossTray','networkBranchA','storageTrayA','storageA']),
-    hdd:route(['hddA','hddTrayA','networkBranchA','crossTray','networkBranchB','hddTrayB','hddB']),
-    backup:route(...hallInfrastructure.map(({suffix:s})=>['compute'+s,'computeTray'+s,'networkEntry'+s,'networkBranch'+s,'backupTray'+s,'backup'+s])),
+    accessA:route(['computeA','computeTrayA','computeBranchA','storageBranchA','storageTrayA','storageA']),
+    accessB:route(['computeB','computeTrayB','computeBranchB','storageBranchB','storageTrayB','storageB']),
+    remoteB:route(['computeA','computeTrayA','computeBranchA','crossTray','storageBranchB','storageTrayB','storageB']),
+    replica:route(['storageA','storageTrayA','storageBranchA','crossTray','storageBranchB','storageTrayB','storageB']),
+    rebuild:route(['storageB','storageTrayB','storageBranchB','crossTray','storageBranchA','storageTrayA','storageA']),
+    hdd:route(['hddA','hddTrayA','hddBranchA','crossTray','hddBranchB','hddTrayB','hddB']),
+    backup:route(...hallInfrastructure.map(({suffix:s})=>['compute'+s,'computeTray'+s,'computeBranch'+s,'backupBranch'+s,'backupTray'+s,'backup'+s])),
   },
   compute:distribution,
   solar:{
-    panels:route(['solar','solarRoof','solarRiser','inverter','switchgear','upsInput','ups']),
-    grid:{...powerRoutes.grid,tone:'grid'},
+    panels:route(['solar','solarAlongRoof','solarRiser','inverter','inverterLift',...switchgearToUps]),
+    grid:powerRoutes.grid,
     racks:powerRoutes.racks,cooling:powerRoutes.cooling,
   },
 }

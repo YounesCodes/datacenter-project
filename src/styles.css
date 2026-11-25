@@ -68,7 +68,7 @@ h1{font-size:clamp(27px,3.3vw,43px);line-height:1.13;font-weight:670;letter-spac
 .stage[data-scale=city] .view-paper{background:#e5eae0}
 .canvas-host canvas{position:absolute;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
 .canvas-host canvas:active{cursor:grabbing}
-.canvas-host .flow-particles{pointer-events:none}
+.canvas-host .flow-overlay{pointer-events:none}
 .scene-labels{pointer-events:none}
 .scene-marker{background:#fbfcf6;border:1px solid #b6cbbb;color:#213c2f;font-size:10px;line-height:1;letter-spacing:-.014em;font-weight:730;white-space:nowrap;display:flex;gap:6px;align-items:center;padding:6px 7px;border-radius:5px;box-shadow:0 2px 5px #172f2530;position:absolute;left:0;top:0;pointer-events:auto}
 .scene-marker:hover,.scene-marker.selected{background:#235e46;color:white;border-color:#1b4b37;z-index:2}
@@ -97,12 +97,11 @@ h1{font-size:clamp(27px,3.3vw,43px);line-height:1.13;font-weight:670;letter-spac
 .stage-floors button[aria-pressed=true]{background:#e5efe5;color:#205139;font-weight:735}
 .stage-toolbar{position:absolute;z-index:510;right:13px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:1px;padding:3px;border-radius:8px}
 .stage-toolbar>span{height:1px;margin:2px 3px;background:#dce5db}
-.camera-options{position:absolute;right:56px;top:50%;transform:translateY(-50%);z-index:520;min-width:158px;padding:8px;border-radius:8px}
+.camera-options{padding:8px;border-radius:8px}
 .camera-options .eyebrow{padding:3px 5px 5px;font-size:8px}
 .camera-options button{display:flex;align-items:center;justify-content:space-between;gap:6px;outline-offset:0;width:100%;padding:6px;border:0;background:transparent;border-radius:4px;text-align:left;font-size:11px}
 .camera-options button:hover,.camera-options button[aria-pressed=true]{background:#ebf2e8;color:var(--accent)}
 .camera-options button span{font-size:9px;color:#607a67}
-.camera-options hr{border:0;border-top:1px solid #e0e8df}
 .geo-pin{display:flex;align-items:center;gap:5px;padding:6px 8px;border-radius:5px;font-size:9px;line-height:1.3;color:#52685a}
 .geo-pin svg{flex-shrink:0;color:#668474}
 .orientation{width:35px;height:43px;border-radius:7px;color:#3b6851;display:grid;place-content:center;justify-items:center;gap:0;padding:3px}
@@ -111,7 +110,6 @@ h1{font-size:clamp(27px,3.3vw,43px);line-height:1.13;font-weight:670;letter-spac
 .floor-caption,.active-route{position:absolute;z-index:505;bottom:45px;left:13px;padding:6px 8px;border-radius:6px;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:680}
 .floor-caption{bottom:73px}
 .active-route span{background:currentColor}
-.walk-hint{position:absolute;bottom:63px;left:50%;transform:translateX(-50%);width:max-content;max-width:80%;text-align:center;background:#1c3d2d;color:white;padding:9px 13px;border-radius:8px;font-size:11px;z-index:540}
 .layer-strip{min-height:52px;display:flex;align-items:center;gap:11px;padding:8px 12px;background:#fafbf8;border-top:1px solid var(--line);min-width:0}
 .layer-title{display:flex;align-items:center;gap:5px;color:#526a5b;font-size:10px;font-weight:720;white-space:nowrap}
 .layer-chips{display:flex;align-items:center;gap:5px;min-width:0;overflow:auto;scrollbar-width:thin}

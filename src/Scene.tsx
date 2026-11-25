@@ -1,11 +1,11 @@
 import { useEffect,useRef,useState } from 'react'
 import { Building2, ChevronRight, RefreshCw, TriangleAlert } from 'lucide-react'
 import { createScene,type SceneState } from './sceneRuntime'
-import { rooms } from './model'
+import { rooms,type WalkZone } from './model'
 import type { CameraAction } from './viewState'
 
-const siteMarkers=[['hall-a','Salle A'],['hall-b','Salle B'],['power','Électricité'],['cooling','Refroidissement'],['network','Réseau'],['reception','Accueil'],['reserve','Réserve'],['generator','Groupes']] as const
-type Props=SceneState&{action:CameraAction;onSelect:(id:string)=>void;onWalkExit:()=>void;targetLabel:string}
+const siteMarkers=[['hall-a','Salle A'],['hall-b','Salle B'],['power','Électricité'],['cooling','Refroidissement'],['network','Réseau'],['reception','Accueil'],['delivery','Livraison'],['reserve','Réserve'],['generator','Groupes']] as const
+type Props=SceneState&{action:CameraAction;onSelect:(id:string)=>void;onWalkExit:()=>void;onWalkZone:(zone:WalkZone|null)=>void;targetLabel:string}
 export default function Scene(props:Props){
   const host=useRef<HTMLDivElement>(null),labelHost=useRef<HTMLDivElement>(null),eventHost=useRef<HTMLDivElement>(null)
   const handler=useRef(props)
@@ -19,7 +19,8 @@ export default function Scene(props:Props){
     const fail=()=>setError(true)
     node.addEventListener('sceneerror',fail)
     try{
-      scene.current=createScene(node,labelHost.current,eventHost.current,id=>handler.current.onSelect(id),()=>handler.current.onWalkExit())
+      scene.current=createScene(node,labelHost.current,eventHost.current,id=>handler.current.onSelect(id),
+        ()=>handler.current.onWalkExit(),zone=>handler.current.onWalkZone(zone))
       scene.current.apply(handler.current)
       scene.current.action(handler.current.action)
     }catch{fail()}

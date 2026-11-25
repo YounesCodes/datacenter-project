@@ -1,20 +1,11 @@
-import { area, landArea, phases, property, rackPositions, rooms, services, specs, type Phase } from './model'
-
-export type Scenario = 'prudent' | 'équilibré' | 'soutenu'
-export const scenarios: Record<Scenario,number[]> = {
-  prudent:[.15,.25,.40,.55,.65], équilibré:[.25,.40,.60,.75,.85], soutenu:[.40,.60,.80,.90,.95],
-}
+import { area, landArea, phases, property, rackPositions, rooms, specs, type Phase } from './model'
 
 export type Inputs = {
-  occupancy:number; tariff:number; fixed:number; pue:number; solar:number; servers:number;
-  racks:number; hardware:number; maintenance:number; growth:number; phase2Year:number; phase3Year:number;
-  prices:Record<string,number>; scenario?:Scenario;
+  pue:number; solar:number; servers:number; racks:number
 }
 export function defaults(phase:Phase):Inputs {
   const model=phases[phase]
-  return {occupancy:.25,tariff:1,fixed:60_000,pue:1.5,solar:model.solar,servers:model.servers,racks:model.racks,
-    hardware:1,maintenance:1,growth:0,phase2Year:0,phase3Year:0,
-    prices:Object.fromEntries(services.filter(service=>!service.future).map(service=>[service.id,service.price]))}
+  return {pue:1.5,solar:model.solar,servers:model.servers,racks:model.racks}
 }
 export function constrain(value:number,min:number,max:number) {
   return Math.min(max,Math.max(min,Number.isFinite(value)?value:min))
@@ -71,14 +62,10 @@ export function capacity(phase:Phase,inputs:Inputs=defaults(phase)) {
   const backupUsable=backupRaw*specs.backup.arrayFactor*(1-specs.backup.reserve)
   const protectedTB=backupNodes*specs.backup.protectedTB/specs.backup.nodes
   const backupDemand=protectedTB*(1+specs.backup.dailyChange*(specs.backup.days-1)*specs.backup.dedup)*specs.backup.compression
-  const dedicated=Math.floor(servers*.15*(1-specs.compute.haReserve))
-  const clusterHosts=servers-dedicated
+  const clusterHosts=servers-Math.floor(servers*.15*(1-specs.compute.haReserve))
   const vcpu=Math.floor(clusterHosts*specs.compute.cores*specs.compute.cpuRatio*(1-specs.compute.haReserve))
   const clusterRam=Math.floor(clusterHosts*specs.compute.ram*(1-specs.compute.memoryReserve)*(1-specs.compute.haReserve))
   const vmSlots=Math.floor(Math.min(vcpu/specs.compute.virtualCores,clusterRam/specs.compute.virtualRam,nvme.allocatable/specs.compute.virtualTB))
-  const vm=Math.floor(vmSlots*.75)
-  const privateLots=Math.floor((vmSlots-vm)/32)
-  const backupCommercial=Math.max(0,Math.floor(backupUsable-backupDemand))
   const perHallDesign=designIT*specs.thermal.designMultiplier/2
   const activeCooling=Math.ceil(perHallDesign/specs.thermal.netUnitKW)
   const coolingUnits=activeCooling?2*(activeCooling+1):0
@@ -90,8 +77,7 @@ export function capacity(phase:Phase,inputs:Inputs=defaults(phase)) {
     vcpu,clusterRam,vmSlots,upsModules,batteryKWh,generators,coolingUnits,activeCooling,perHallDesign,
     fuelL:Math.max(0,generators-1)*specs.electrical.fuelHours*specs.electrical.fuelLPerHour,
     availableU:racks.length*specs.rack.u-racks.reduce((sum,rack)=>sum+rack.units,0),
-    usable:nvme.usable+hdd.usable, raw:nvme.raw+hdd.raw, allocatable:nvme.allocatable+hdd.allocatable,
-    products:{vps:vm,dedicated,object:Math.floor(hdd.allocatable),backup:backupCommercial,private:privateLots}}
+    usable:nvme.usable+hdd.usable, raw:nvme.raw+hdd.raw, allocatable:nvme.allocatable+hdd.allocatable}
 }
 export type Capacity=ReturnType<typeof capacity>
 
@@ -101,17 +87,30 @@ export function solarProfile(hour:number, solar:number, totalKW:number) {
   const selfUse=Math.min(totalKW,production)
   return {production,selfUse,grid:totalKW-selfUse,elevation}
 }
+// ONEE Tarif Général MT, TTC. The winter and summer schedules each cover half the year.
+const mediumVoltage={peak:1.4157,normal:1.0101,offPeak:.7398,annualKVA:512.62}
+function mediumVoltageRate(hour:number,peakStart:number){
+  if(hour>=peakStart&&hour<peakStart+5) return mediumVoltage.peak
+  return hour>=7&&hour<peakStart?mediumVoltage.normal:mediumVoltage.offPeak
+}
 export function energy(phase:Phase,inputs:Inputs=defaults(phase),cap=capacity(phase,inputs)) {
-  const facility=cap.avgIT*constrain(inputs.pue,1,3)
+  const pue=constrain(inputs.pue,1,3)
+  const facility=cap.avgIT*pue
   const demand=facility*8760
   const production=constrain(inputs.solar,0,120)*specs.solar.yield
-  const profile=Array.from({length:96},(_,i)=>solarProfile((i+.5)/4,inputs.solar,facility))
+  const profile=Array.from({length:96},(_,i)=>{
+    const hour=(i+.5)/4
+    return {...solarProfile(hour,inputs.solar,facility),rate:(mediumVoltageRate(hour,17)+mediumVoltageRate(hour,18))/2}
+  })
   const generationDay=profile.reduce((sum,item)=>sum+item.production/4,0)
   const consumedDay=profile.reduce((sum,item)=>sum+item.selfUse/4,0)
   const solarUse=Math.min(demand,production*Math.min(specs.solar.selfUse,generationDay?consumedDay/generationDay:0))
   const grid=demand-solarUse
-  const tariff=constrain(inputs.tariff,0,5)
-  return {facility,demand,production,solarUse,grid,cost:grid*tariff+constrain(inputs.fixed,0,1e6),savings:solarUse*tariff}
+  const annualGridWithoutSolar=365*profile.reduce((sum,item)=>sum+facility*item.rate/4,0)
+  const solarRate=consumedDay?profile.reduce((sum,item)=>sum+item.selfUse*item.rate/4,0)/consumedDay:0
+  const savings=solarUse*solarRate
+  const fixed=cap.designIT*pue/.9*mediumVoltage.annualKVA
+  return {facility,demand,production,solarUse,grid,cost:annualGridWithoutSolar-savings+fixed,savings}
 }
 export const costRows = [
   {id:'land',name:'Terrain',group:'Bâtiment et site',unit:'parcelle',cost:[650_000,property.price,property.price],source:'Prix affiché et plafond retenu pour la parcelle. Frais d’acquisition exclus.'},
@@ -126,7 +125,7 @@ export const costRows = [
   {id:'crac',name:'Climatisation de précision DX',group:'Infrastructure spécialisée',unit:'unité de 32 kW nets',cost:[170_000,255_000,390_000],source:'Provision par climatiseur avec condenseur, tuyauterie et régulation.'},
   {id:'solar',name:'Installation photovoltaïque',group:'Infrastructure spécialisée',unit:'kWc',cost:[6800,8800,11800],source:'Fourchette pour une installation en autoconsommation commerciale, pose et onduleur inclus.'},
   {id:'rack',name:'Baies 42U',group:'Informatique et réseau',unit:'baie',cost:[5500,8500,13000],source:'Baie nue avec montants, panneaux et guidage.'},
-  {id:'compute',name:'Serveurs de calcul reconditionnés',group:'Informatique et réseau',unit:'serveur',cost:[14000,21000,30000],source:'Provision configuration 32 cœurs et 256 Gio, pièces et garantie à confirmer.'},
+  {id:'compute',name:'Serveurs de calcul reconditionnés',group:'Informatique et réseau',unit:'serveur',cost:[14000,21000,30000],source:'Serveur reconditionné de 32 cœurs et 256 Gio.'},
   {id:'nvme',name:'Serveurs de stockage NVMe',group:'Informatique et réseau',unit:'nœud',cost:[44000,65000,95000],source:'Provision nœud, huit SSD entreprise, interfaces doubles et pièces.'},
   {id:'hdd',name:'Serveurs de stockage HDD',group:'Informatique et réseau',unit:'nœud',cost:[27000,40000,59000],source:'Provision nœud, huit disques entreprise et interfaces doubles.'},
   {id:'backup',name:'Serveurs de sauvegarde',group:'Informatique et réseau',unit:'nœud',cost:[50000,80000,115000],source:'Provision serveur 144 To bruts, interfaces et disques.'},
@@ -136,7 +135,6 @@ export const costRows = [
   {id:'fire',name:'Détection et extinction incendie',group:'Infrastructure spécialisée',unit:'site',cost:[270000,465000,780000],source:'Provision détection par aspiration, extincteurs et agent propre en zones techniques.'},
 ] as const
 export type CostId=(typeof costRows)[number]['id']
-export const costDate='novembre 2026'
 export function costs(phase:Phase,inputs:Inputs=defaults(phase),cap=capacity(phase,inputs)) {
   const q:Record<CostId,number>={
     land:1,site:landArea-area(property.building),shell:area(property.building)+area(property.upper),design:1,furniture:1,
@@ -145,9 +143,7 @@ export function costs(phase:Phase,inputs:Inputs=defaults(phase),cap=capacity(pha
     hdd:cap.hdd.nodes,backup:cap.backupNodes,network:phases[phase].networkScale,cabling:cap.racks.length/16,security:1,fire:1,
   }
   const rows=costRows.map(row=>{
-    const multiplier=row.group==='Informatique et réseau'?constrain(inputs.hardware,.25,3):1
-    const unit=row.cost.map(price=>price*multiplier)
-    return {...row,quantity:q[row.id],unitCost:unit, totals:unit.map(price=>price*q[row.id])}
+    return {...row,quantity:q[row.id],unitCost:row.cost,totals:row.cost.map(price=>price*q[row.id])}
   })
   const subtotal=[0,1,2].map(column=>rows.reduce((sum,row)=>sum+row.totals[column],0))
   const contingency=subtotal.map(total=>total*.12)
@@ -156,44 +152,20 @@ export function costs(phase:Phase,inputs:Inputs=defaults(phase),cap=capacity(pha
 }
 export function operations(phase:Phase,inputs:Inputs=defaults(phase),cap=capacity(phase,inputs),power=energy(phase,inputs,cap),budget=costs(phase,inputs,cap)) {
   const asset=(id:CostId)=>budget.rows.find(row=>row.id===id)!.totals[1]
-  const maintenance=constrain(inputs.maintenance,0,3)
   const itAssets=(['rack','compute','nvme','hdd','backup','network'] as CostId[]).reduce((sum,id)=>sum+asset(id),0)
   const rows=[
     {name:'Électricité et frais fixes',cost:power.cost},
     {name:'Connectivité des deux opérateurs',cost:240_000*phases[phase].networkScale},
-    {name:'Maintenance informatique',cost:itAssets*.04*maintenance},
-    {name:'Groupes et carburant des essais',cost:(asset('generator')*.035+Math.max(0,cap.generators-1)*specs.electrical.exerciseHours*specs.electrical.fuelLPerHour*specs.electrical.dieselMAD)*maintenance},
-    {name:'Maintenance du refroidissement',cost:asset('crac')*.05*maintenance},
-    {name:'Entretien solaire',cost:asset('solar')*.015*maintenance},
-    {name:'Abonnements et logiciels',cost:(cap.servers*420+cap.backupNodes*2500)*maintenance},
-    {name:'Réserve de remplacement',cost:itAssets*.07*maintenance},
+    {name:'Maintenance informatique',cost:itAssets*.04},
+    {name:'Groupes et carburant des essais',cost:asset('generator')*.035+Math.max(0,cap.generators-1)*specs.electrical.exerciseHours*specs.electrical.fuelLPerHour*specs.electrical.dieselMAD},
+    {name:'Maintenance du refroidissement',cost:asset('crac')*.05},
+    {name:'Entretien solaire',cost:asset('solar')*.015},
+    {name:'Abonnements et logiciels',cost:cap.servers*420+cap.backupNodes*2500},
+    {name:'Réserve de remplacement',cost:itAssets*.07},
     {name:'Assurance des installations',cost:budget.central*.005},
-    {name:'Eau et services techniques',cost:56_000*maintenance},
+    {name:'Eau et services techniques',cost:56_000},
   ]
   const annual=rows.reduce((sum,row)=>sum+row.cost,0)
   return {rows,annual,monthly:annual/12}
-}
-export function revenue(cap:Capacity,inputs:Inputs,occupancy=inputs.occupancy) {
-  return Object.entries(cap.products).reduce((sum,[id,quantity])=>sum+quantity*constrain(inputs.prices[id]??0,0,100_000),0)*constrain(occupancy,0,1)
-}
-export function projections(phase:Phase,inputs:Inputs,scenario:Scenario) {
-  let previousInvestment=0,cumulative=0
-  return scenarios[scenario].map((baseline,index)=>{
-    const year=index+1
-    const phase2=phase>=2||(inputs.phase2Year>=2&&inputs.phase2Year<=year)
-    const phase3=phase2&&inputs.phase3Year>(phase>=2?1:inputs.phase2Year)&&inputs.phase3Year<=year
-    const deployment=Math.max(phase,phase3?3:phase2?2:1) as Phase
-    const current=deployment===phase?inputs:{...inputs,servers:phases[deployment].servers,racks:phases[deployment].racks}
-    const cap=capacity(deployment,current)
-    const investment=costs(deployment,current,cap).central
-    const opex=operations(deployment,current,cap).annual
-    const occupancy=constrain(baseline+inputs.occupancy-.25+inputs.growth*index,0,1)
-    const turnover=revenue(cap,current,occupancy)*12
-    const capex=Math.max(0,investment-previousInvestment)
-    previousInvestment=Math.max(investment,previousInvestment)
-    const margin=turnover-opex
-    cumulative+=margin-capex
-    return {year,phase:deployment,occupancy,turnover,opex,capex,margin,cumulative}
-  })
 }
 export const groundSupport=area(property.building)-rooms.filter(room=>room.floor==='ground').reduce((sum,room)=>sum+area(room.rect),0)

@@ -44,24 +44,18 @@ details>summary{cursor:pointer}
 .related-list{display:grid;grid-template-columns:1fr;gap:3px;margin-top:7px;max-height:214px;overflow:auto;scrollbar-width:thin}
 .related-list button{border:0;border-radius:5px;background:#fbfcf8;display:flex;justify-content:space-between;gap:5px;padding:6px;font-size:10px;text-align:left;color:#445e4f}
 .related-list button:hover{background:#e5efe5}
-.system-path{list-style:none;margin:16px 0;padding:0 0 0 3px}
-.system-path li{position:relative;border-left:1px solid #ccdacf;padding:0 0 10px 17px;color:#50655a;font-size:11px}
-.system-path li::before{content:'';position:absolute;left:-4px;top:.3em;width:7px;height:7px;border-radius:50%;background:var(--route)}
-.system-path li:last-child{border-left-color:transparent;padding-bottom:0}
+.system-path{list-style:none;display:grid;gap:5px;margin:16px 0;padding:0;color:#50655a;font-size:11px}
+.cost-estimates{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cost-estimates .metric:nth-child(2){background:#e7f0e5;border-color:#b8cdbb}
 .storage-example{padding-top:11px}
 .storage-example h3{font-size:12px}
 .fragments{display:flex;gap:4px;margin:5px 0}
 .fragments b{font-size:9px;border-radius:4px;padding:5px;background:#e7d8bf;color:#6a4d24}
 .fragments b.parity{background:#e0e9db;color:#3c684c}
-.sim-progress{display:flex;gap:4px;margin:15px 0}
-.sim-progress button{height:5px;min-height:11px;padding:0;flex:1;border:2px solid #fbfcf8;background:#d9e3d8;border-radius:6px}
-.sim-progress button.filled{background:#5f936e}
 .event-card{background:#f0f5ed;border:1px solid #dce8da;border-radius:8px;padding:10px;margin-bottom:12px}
 .event-card h3{font-size:15px;line-height:1.2;margin:5px 0}
 .event-card strong{display:block;color:var(--accent-dark);font-size:11px;margin-top:10px}
 .event-card small{display:block;color:#446d54;font-size:10px;margin-top:5px}
-.sim-buttons{display:flex;gap:5px;align-items:center}
-.sim-buttons .primary-button{min-height:32px;padding:6px 8px}
 .footer{padding:12px 1px 15px;display:flex;align-items:center;justify-content:flex-end;gap:10px;font-size:10px;color:#6a7b6e}
 .footer>span,.footer>a,.footer button{display:flex;align-items:center;gap:6px}
 .footer>a{color:#52745f;text-decoration:none}
@@ -72,25 +66,12 @@ details>summary{cursor:pointer}
 .dashboard-heading{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;background:#f9fbf7;border:1px solid var(--line);border-radius:10px;padding:20px}
 .dashboard-heading h2{font-size:clamp(22px,2.7vw,34px);letter-spacing:-.052em;font-weight:675;margin:4px 0 4px}
 .dashboard-heading p,.surface>p{color:var(--muted);font-size:12px}
-.dashboard-columns{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start}
-.cost-columns{grid-template-columns:minmax(245px,.65fr) minmax(0,1.9fr)}
+.dashboard>.small-copy{color:var(--muted);font-size:12px;line-height:1.5;padding:0 2px}
+.dashboard>.small-copy a{color:#2b6348}
 .surface{background:#fbfcf9;border:1px solid var(--line);border-radius:9px;padding:16px;min-width:0}
 .surface h3{font-size:18px;letter-spacing:-.027em;line-height:1.2;margin-bottom:8px}
 .surface .small-copy{font-size:11px;line-height:1.48;margin-top:8px}
 .stack{display:grid;gap:14px;min-width:0}
-.field{display:grid;gap:6px;min-width:0;padding:9px 0;color:#496052;font-size:11px;font-weight:650}
-.field>span{display:flex;align-items:center;justify-content:space-between;gap:6px}
-.field output{color:#214d37;white-space:nowrap;border:1px solid #d7e5d7;border-radius:4px;background:#edf3ea;padding:2px 5px;font-size:11px;font-weight:750}
-.field small{color:#657b6a;font-size:10px;font-weight:480;line-height:1.4}
-.field input[type=range]{width:100%;height:17px;margin:0;accent-color:#397757}
-.numeric-field>div{display:flex;gap:6px;align-items:center}
-.field input[type=number],.field select{min-width:0;max-width:100%;background:#fff;border:1px solid #ccddce;border-radius:5px;padding:5px 7px;color:#274936}
-.field input[type=number]{width:125px}
-.cost-settings details{margin-top:8px;padding:8px 0;border-top:1px solid #e0e6df;color:#365f48;font-size:11px}
-.scenario-buttons{display:flex;gap:5px;flex-wrap:wrap}
-.scenario-buttons .soft-button{text-transform:capitalize}
-.scenario-buttons [aria-pressed=true]{background:#e4efe3;border-color:#afd1b5}
-.forecast-controls{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;margin:7px 0}
 .table-scroll{min-width:0;overflow:auto;scrollbar-width:thin}
 table{border-collapse:collapse;width:100%;text-align:left;color:#354f41;font-size:11px;font-variant-numeric:tabular-nums;margin:7px 0}
 thead{background:#eaf1e7}
@@ -103,16 +84,6 @@ th small,td small{display:block;color:#667d6e;font-size:9px;font-weight:460;min-
 .positive{color:#256b46}
 .info-note{display:flex;align-items:flex-start;gap:8px;border:1px solid #d9e6d8;background:#edf4eb;border-radius:8px;color:#4f6e59;padding:9px 12px;font-size:11px}
 .info-note svg{flex-shrink:0}
-.hour-chart{display:flex;align-items:stretch;gap:4px;height:142px;margin-top:14px;background:repeating-linear-gradient(0deg,#e4ede4 0px,#e4ede4 1px,transparent 1px,transparent 28px);border-bottom:1px solid #bfcfbe}
-.hour-chart button{flex:1;min-width:0;border:0;padding:0 1px;display:flex;flex-direction:column;justify-content:flex-end;background:none}
-.hour-chart button i{width:100%;display:block}
-.hour-chart button.active{outline:1px solid #295d41;outline-offset:1px}
-.from-grid,.grid-swatch{background:#6e9581}
-.from-sun,.sun-swatch{background:#c1aa55}
-.chart-axis,.legend-row{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#5d7766;margin:5px 0}
-.legend-row{justify-content:flex-start;gap:15px;margin:8px 0}
-.legend-row span{display:flex;align-items:center;gap:5px}
-.swatch{display:inline-block;width:9px;height:9px;border-radius:2px}
 .phase-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .phase-card{border:1px solid #d2e0d3;border-radius:9px;padding:14px;text-align:left;background:#fcfdf9;display:grid;justify-items:start;gap:7px;color:#4b6557;font-size:12px}
 .phase-card.current{background:#ecf4e9;border-color:#9fc4a6}
@@ -121,10 +92,6 @@ th small,td small{display:block;color:#667d6e;font-size:9px;font-weight:460;min-
 .phase-card small{display:flex;align-items:center;gap:3px;color:#3b6c4f;font-weight:650}
 .phase-bar{height:5px;width:100%;border-radius:5px;background:#dce8da}
 .phase-bar i{display:block;height:100%;border-radius:5px;background:#78a284}
-.service-list>div{display:flex;align-items:start;justify-content:space-between;gap:9px;padding:7px 0;border-bottom:1px solid #e3ebe3;color:#42614f;font-size:11px}
-.service-list strong{display:block;color:#294e39;font-size:11px}
-.service-list small{display:block;margin-top:3px;color:#5d7364}
-.service-list>div>span{white-space:nowrap;color:#2b5e40}
 .help-dialog{width:min(440px,calc(100% - 25px));border:1px solid #c9dacc;border-radius:10px;padding:16px;color:var(--ink);background:#fafcf7;box-shadow:0 15px 70px #182c2455}
 .help-dialog::backdrop{background:#162b246b}
 .help-dialog header{display:flex;align-items:center;gap:7px}

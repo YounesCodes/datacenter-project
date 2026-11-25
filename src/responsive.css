@@ -47,7 +47,6 @@
   .stage[data-scale=site] .stage-head,.stage[data-scale=site] .stage-bottom{left:8px;right:8px}
   .stage-floors{left:8px}
   .stage-toolbar{right:8px}
-  .camera-options{right:51px}
   .geo-pin{max-width:calc(100% - 43px)}
   .scene-marker{font-size:8px;padding:4px 5px;gap:3px}
   .layer-strip{min-height:41px;padding:5px 6px}
@@ -58,7 +57,6 @@
   .footer{flex-wrap:wrap;font-size:9px;padding:9px 0}
   .footer>a{order:3;flex-basis:100%}
   .dashboard-heading{flex-direction:column;padding:12px;gap:8px}
-  .dashboard-columns,.cost-columns{grid-template-columns:1fr}
   .surface{padding:12px}
   .phase-cards{grid-template-columns:1fr}
   .phase-card{grid-template-columns:repeat(2,1fr);padding:10px;gap:5px;font-size:11px}
@@ -66,9 +64,6 @@
   .phase-card h3{font-size:17px}
   .metrics-grid.wide{gap:7px}
   .metrics-grid.wide .metric{padding:8px}
-  .forecast-controls{grid-template-columns:1fr 1fr;gap:5px}
-  .forecast-controls .range-field{grid-column:1/-1}
-  .hour-chart{gap:2px}
 }
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
