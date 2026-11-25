@@ -1,7 +1,8 @@
 import { useEffect,useRef,useState } from 'react'
 import { Building2, ChevronRight, RefreshCw, TriangleAlert } from 'lucide-react'
-import { createScene,type SceneState } from './sceneRuntime'
-import { rooms,type WalkZone } from './model'
+import { createScene,type AccessPrompt,type SceneState } from './sceneRuntime'
+import { rooms,type AuthenticatedDoor,type WalkZone } from './model'
+import AccessReader,{ DoorPrompt } from './AccessReader'
 import type { CameraAction } from './viewState'
 
 const siteMarkers=[['hall-a','Salle A'],['hall-b','Salle B'],['power','Électricité'],['cooling','Refroidissement'],['network','Réseau'],['reception','Accueil'],['delivery','Livraison'],['reserve','Réserve'],['generator','Groupes']] as const
@@ -13,6 +14,8 @@ export default function Scene(props:Props){
   const scene=useRef<ReturnType<typeof createScene>|null>(null)
   const [error,setError]=useState(false)
   const [attempt,retry]=useState(0)
+  const [accessPrompt,setAccessPrompt]=useState<AccessPrompt|null>(null)
+  const [accessDoor,setAccessDoor]=useState<AuthenticatedDoor|null>(null)
   useEffect(()=>{
     if(!host.current||!labelHost.current||!eventHost.current) return
     const node=host.current
@@ -20,7 +23,7 @@ export default function Scene(props:Props){
     node.addEventListener('sceneerror',fail)
     try{
       scene.current=createScene(node,labelHost.current,eventHost.current,id=>handler.current.onSelect(id),
-        ()=>handler.current.onWalkExit(),zone=>handler.current.onWalkZone(zone))
+        ()=>handler.current.onWalkExit(),zone=>handler.current.onWalkZone(zone),setAccessPrompt,setAccessDoor)
       scene.current.apply(handler.current)
       scene.current.action(handler.current.action)
     }catch{fail()}
@@ -45,6 +48,9 @@ export default function Scene(props:Props){
       </button>)}
     </div>
     <span className="event-pin" ref={eventHost} hidden={error||!props.anchor} aria-hidden="true"/>
+    {props.walk&&!error&&accessPrompt&&!accessDoor&&<DoorPrompt prompt={accessPrompt} onInteract={()=>scene.current?.startAccess()}/>}
+    {props.walk&&!error&&accessDoor&&<AccessReader key={accessDoor.id} door={accessDoor}
+      onRestorePointer={()=>scene.current?.restoreAccessPointer()} onFinish={approved=>scene.current?.finishAccess(approved)}/>}
     {error&&<div className="scene-fallback" role="status">
       <TriangleAlert size={28}/><h3>La vue 3D est indisponible</h3>
       <p>Ouvrez une salle pour consulter ses équipements et ses caractéristiques.</p>

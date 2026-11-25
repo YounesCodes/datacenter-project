@@ -1,34 +1,32 @@
 import * as T from 'three'
-import { accessVestibule,coolingCircuitSuffixes,equipment,hallInfrastructure,property,rooms,stairs,technicalPorts,upperSlabs,type Point } from './model'
+import { accessVestibule,coolingCircuitSuffixes,eastGroundDoors,equipment,hallInfrastructure,loadingDoor,property,rooms,secureEntrances,secureSas,serviceEntry,stairSideDoors,stairs,technicalPorts,upperSlabs,utilityDoor,type Point } from './model'
 import type { Capacity } from './engineering'
 import { batch,cableGland,colors as C,flooring,rod,segment,slab,type Place } from './geometryTools'
 
 export type Collision={x:number;z:number;w:number;d:number}
-type Wall={vertical:boolean;line:number;a:number;b:number;door?:[number,number];badge?:boolean;room?:string}
+type Wall={vertical:boolean;line:number;a:number;b:number;door?:readonly [number,number];badge?:boolean;room?:string;loading?:boolean}
 const doors:Record<string,{edge:'n'|'e'|'s'|'w';at:number;width?:number;badge?:boolean}>={
-  'hall-a':{edge:'s',at:-17.4,width:1.75,badge:true},'hall-b':{edge:'s',at:7.6,width:1.75,badge:true},
-  power:{edge:'n',at:-9.2,width:1.35,badge:true},cooling:{edge:'n',at:-4.5,width:1.35},delivery:{edge:'n',at:5.5,width:2.15},
-  network:{edge:'s',at:18.15,width:1.25,badge:true},noc:{edge:'e',at:-8.2},reception:{edge:'n',at:15.2,width:1.35,badge:true},
-  utility:{edge:'s',at:14.15},offices:{edge:'s',at:13.1},meeting:{edge:'s',at:17.4},shared:{edge:'e',at:7.4},
-  break:{edge:'n',at:11.1},restroom:{edge:'e',at:11},
+  delivery:{edge:'n',at:5.5,width:2.15},noc:{edge:'e',at:-8.2},reception:{edge:'n',at:15.2,width:1.35,badge:true},
+  utility:utilityDoor,offices:{edge:'s',at:13.1},meeting:{edge:'s',at:17.4},
+  break:{edge:'n',at:11.1},...stairSideDoors,
 }
 export function walls(box:Place,floor:'ground'|'upper',full:boolean,visibleIds?:ReadonlySet<string>) {
   const base=floor==='ground'?slab:property.technicalHeight+slab
   const max=floor==='ground'?property.technicalHeight-slab:property.upperHeight-slab
   const buckets=new Map<string,Wall[]>()
-  const add=(vertical:boolean,line:number,a:number,b:number,door?:[number,number],badge?:boolean,room?:string)=>{
+  const add=(vertical:boolean,line:number,a:number,b:number,door?:Wall['door'],badge?:boolean,room?:string,loading=false)=>{
     const key=String(vertical)+','+line
     const bucket=buckets.get(key)??[]
-    bucket.push({vertical,line,a,b,door,badge,room});buckets.set(key,bucket)
+    bucket.push({vertical,line,a,b,door,badge,room,loading});buckets.set(key,bucket)
   }
   const [x,z,w,d]=floor==='ground'?property.building:property.upper
   add(false,z,x,x+w)
-  add(false,z+d,x,x+w,floor==='ground'?[5.5,3.15]:undefined)
-  add(true,x,z,z+d,floor==='ground'?[-.95,1.65]:undefined)
-  add(true,x+w,z,z+d,floor==='ground'?[accessVestibule.axis,accessVestibule.outerDoor]:undefined)
+  add(false,z+d,x,x+w,floor==='ground'?loadingDoor.opening:undefined,undefined,undefined,floor==='ground')
+  add(true,x,z,z+d,floor==='ground'?serviceEntry:undefined)
+  add(true,x+w,z,z+d,floor==='ground'?eastGroundDoors.reception:undefined)
   if(floor==='ground'){
-    add(true,x+w,z,z+d,[-8.6,1.2])
-    add(true,x+w,z,z+d,[11.2,1.2])
+    add(true,x+w,z,z+d,eastGroundDoors.network)
+    add(true,x+w,z,z+d,eastGroundDoors.stairs)
     const {rect:[west,north,width,depth],axis,innerDoor}=accessVestibule
     add(true,west,north,north+depth,[axis,innerDoor])
     for(const edge of [north,north+depth]) add(false,edge,west,west+width)
@@ -37,14 +35,18 @@ export function walls(box:Place,floor:'ground'|'upper',full:boolean,visibleIds?:
       box([west+width/2,base+2.585,axis],[1.55,.055,.25],C.white,undefined,0,'box','light')
     }
   }
-  if(floor==='ground') add(false,10.5,2,9,[5.5,3.15])
   for(const room of rooms.filter(room=>room.floor===floor)){
     const [rx,rz,rw,rd]=room.rect
-    const move=doors[room.id]
+    const move=doors[room.id]??secureEntrances[room.id]
     for(const [edge,v,line,a,b] of [['n',false,rz,rx,rx+rw],['s',false,rz+rd,rx,rx+rw],['w',true,rx,rz,rz+rd],['e',true,rx+rw,rz,rz+rd]] as const){
       const door:Wall['door']=move?.edge===edge?[move.at,move.width??1.02]:undefined
-      add(v,line,a,b,door,move?.badge&&Boolean(door),room.id)
+      add(v,line,a,b,door,doors[room.id]?.badge&&Boolean(door),room.id)
     }
+  }
+  if(floor==='ground') for(const {inner,rect:[left,near,width,depth]} of secureSas){
+    for(const edge of [left,left+width]) add(true,edge,near,near+depth,undefined,false,inner.room.id)
+    add(false,inner.z,left,left+width,[inner.x,inner.width],false,inner.room.id)
+    flooring(box,[left+.1,near+.1,width-.2,depth-.2],base+.035,'#b4c2b8',inner.room.id,.029)
   }
   const collisions:Collision[]=[]
   const visible=(edge:Wall)=>!visibleIds||Boolean(edge.room&&visibleIds.has(edge.room))
@@ -65,6 +67,11 @@ export function walls(box:Place,floor:'ground'|'upper',full:boolean,visibleIds?:
     for(const edge of edges){
       if(!edge.door||!visible(edge)) continue
       const [p,w]=edge.door
+      if(edge.loading){
+        const lintel=max-loadingDoor.height
+        if(full&&lintel>0) segment(box,at(p-w/2,base+loadingDoor.height+lintel/2),at(p+w/2,base+loadingDoor.height+lintel/2),property.wall,'#dfded1',lintel)
+        continue
+      }
       for(const end of [-1,1]) box(at(p+end*(w/2-.045),base+(full?1.05:.54)),[.115,full?2.10:1.08,.115],C.door)
       if(full){
         segment(box,at(p-w/2,base+2.14),at(p+w/2,base+2.14),.23,C.door,.13)
@@ -114,39 +121,140 @@ function monitor(box:Place,x:number,y:number,z:number,w:number,id:string,screen:
   box([x,y+.017,z+.24],[.37,.034,.16],C.metal,id)
   box([x+.28,y+.022,z+.24],[.072,.044,.115],C.rack,id,0,'sphere')
 }
-function desk(box:Place,obstacles:Collision[],x:number,z:number,y:number,id:string,w=1.35,noc=false){
+// Places parts given in coordinates local to (x,z), turned by yaw like a Three.js rotation.y.
+function turn(box:Place,x:number,z:number,yaw:number):Place{
+  const cos=Math.cos(yaw),sin=Math.sin(yaw)
+  return ([dx,y,dz],size,color,id,rotation=0,...rest)=>
+    box([x+dx*cos+dz*sin,y,z-dx*sin+dz*cos],size,color,id,rotation+yaw,...rest)
+}
+// With yaw 0 the user sits on the +z side facing -z; yaw π puts the desk against a south wall.
+function desk(box:Place,obstacles:Collision[],x:number,z:number,y:number,id:string,w=1.35,noc=false,yaw=0){
   obstacles.push({x,z,w,d:.7})
-  box([x,y+.71,z],[w,.13,.7],'#b39670',id)
-  for(const a of [-1,1]) for(const b of [-1,1]) box([x+a*(w/2-.1),y+.33,z+b*.25],[.06,.65,.06],C.rack,id)
-  monitor(box,x,y+.775,z-.16,w*.55,id,noc?'#6ca79d':'#8ba1a4')
-  chair(box,x,z+.79,y,id)
+  const place=turn(box,x,z,yaw)
+  place([0,y+.71,0],[w,.13,.7],'#b39670',id)
+  for(const a of [-1,1]) for(const b of [-1,1]) place([a*(w/2-.1),y+.33,b*.25],[.06,.65,.06],C.rack,id)
+  monitor(place,0,y+.775,-.16,w*.55,id,noc?'#6ca79d':'#8ba1a4')
+  chair(place,0,.79,y,id)
+}
+function bookcase(place:Place,y:number,w:number,h:number,id:string){
+  // Open-fronted carcass: back panel, sides and top, so the shelves and books stay visible.
+  place([0,y+h/2,-.165],[w,h,.03],'#6b543d',id)
+  for(const side of [-1,1]) place([side*(w/2-.015),y+h/2,0],[.03,h,.36],'#7b6248',id)
+  place([0,y+h-.015,0],[w,.03,.36],'#7b6248',id)
+  place([0,y+.04,.01],[w-.06,.08,.34],'#6b543d',id)
+  const shelves=Math.round(h/.38)
+  for(let i=0;i<shelves;i++){
+    const shelfY=y+.06+i*h/shelves
+    place([0,shelfY,.02],[w-.06,.025,.33],'#9b7d5a',id)
+    if(i===0) continue
+    let at=-w/2+.08
+    for(let book=0;at<w/2-.1;book++){
+      const width=.035+(book*7%5)*.012,height=.2+(book*3%4)*.03
+      if(book%6!==5) place([at+width/2,shelfY+.013+height/2,.04],[width,height,.24],['#40564f','#8c6c4f','#58708a','#b59b6b','#6e4b45'][book%5],id)
+      at+=width+.006
+    }
+  }
+}
+// One executive office: desk facing the door, visitor chairs, credenza and a small lounge corner.
+function directorOffice(box:Place,obstacles:Collision[],x:number,z:number,w:number,d:number,y:number,id:string){
+  flooring(box,[x+.55,z+2.55,2.9,1.45],y+.02,'#8d7b62',id,.012)
+  const deskX=x+1.95,deskZ=z+1.75,deskW=1.9,deskD=.88
+  obstacles.push({x:deskX,z:deskZ,w:deskW,d:deskD})
+  box([deskX,y+.745,deskZ],[deskW,.06,deskD],'#5e4636',id)
+  box([deskX,y+.776,deskZ],[deskW-.16,.004,deskD-.2],'#3f4f49',id)
+  for(const side of [-1,1]) box([deskX+side*(deskW/2-.04),y+.36,deskZ],[.06,.72,deskD-.04],'#4b382b',id)
+  box([deskX,y+.44,deskZ+.38],[deskW-.1,.5,.03],'#4b382b',id)
+  box([deskX+.55,y+.36,deskZ-.05],[.45,.7,.7],'#56412f',id)
+  const top=y+.78
+  box([deskX-.05,top+.012,deskZ-.2],[.36,.016,.25],'#2b3a37',id)
+  box([deskX-.05,top+.13,deskZ-.04],[.36,.23,.012],'#2b3a37',id,0,'box','solid',.28)
+  box([deskX-.05,top+.13,deskZ-.05],[.33,.2,.006],'#6f9590',id,0,'box','solid',.28)
+  box([deskX+.62,top+.012,deskZ+.05],[.24,.03,.32],C.white,id)
+  box([deskX+.62,top+.032,deskZ+.05],[.22,.01,.3],'#e9e4d4',id)
+  box([deskX-.72,top+.01,deskZ-.18],[.13,.02,.13],C.metal,id,0,'round')
+  box([deskX-.72,top+.2,deskZ-.18],[.016,.38,.016],C.metal,id)
+  box([deskX-.67,top+.38,deskZ-.18],[.11,.016,.016],C.metal,id)
+  box([deskX-.6,top+.35,deskZ-.18],[.13,.07,.13],'#e8d8a8',id,0,'round','light')
+  box([deskX-.3,top+.03,deskZ+.32],[.36,.06,.05],'#b59b6b',id,0,'box','solid',-.5)
+  // High-back chair behind the desk, two visitor chairs facing it.
+  chair(box,deskX,deskZ-.82,y,id,Math.PI)
+  box([deskX,y+.98,deskZ-1.05],[.46,.34,.07],C.rack,id)
+  for(const dx of [-.45,.45]) chair(box,deskX+dx,deskZ+1.05,y,id,0,true)
+  obstacles.push({x:deskX,z:deskZ+1.08,w:1.4,d:.5})
+  // Credenza and bookcase along the back wall behind the director.
+  const credenza=turn(box,deskX,z+.3,0)
+  obstacles.push({x:deskX,z:z+.3,w:2.2,d:.44})
+  credenza([0,y+.36,0],[2.2,.7,.44],'#5e4636',id)
+  for(const dx of [-.55,0,.55]) credenza([dx,y+.36,.225],[.52,.62,.012],'#6f5441',id)
+  for(const dx of [-.55,0,.55]) credenza([dx+.18,y+.4,.235],[.018,.12,.02],C.metal,id)
+  credenza([-.7,y+.97,0],[.48,.5,.03],'#a9b8a6',id)
+  credenza([-.7,y+.97,.02],[.42,.43,.01],'#6d8f7f',id)
+  credenza([.6,y+.82,0],[.18,.24,.18],'#d7cdb8',id,0,'round')
+  const shelf=turn(box,x+w-.24,z+1.25,-Math.PI/2)
+  obstacles.push({x:x+w-.24,z:z+1.25,w:.4,d:1.5})
+  bookcase(shelf,y,1.45,2.05,id)
+  // Lounge corner: armchair, side table and plant clear of the door path.
+  const lounge=turn(box,x+w-.55,z+d-.95,Math.PI/2)
+  obstacles.push({x:x+w-.55,z:z+d-.95,w:.8,d:.8})
+  lounge([0,y+.22,0],[.78,.3,.78],'#506a62',id)
+  lounge([0,y+.42,.06],[.66,.12,.62],'#6a857b',id)
+  lounge([0,y+.6,.33],[.78,.52,.16],'#506a62',id)
+  for(const side of [-1,1]) lounge([side*.33,y+.47,0],[.14,.3,.78],'#506a62',id)
+  box([x+w-.5,y+.27,z+2.4],[.42,.54,.42],'#5e4636',id,0,'round')
+  obstacles.push({x:x+w-.5,z:z+2.4,w:.42,d:.42})
+  box([x+.4,y+.22,z+d-.42],[.36,.44,.36],'#8a7462',id,0,'round')
+  for(const [dx,dy,dz,s] of [[0,.66,0,.5],[.09,.86,-.05,.36],[-.08,.8,.08,.34]]) box([x+.4+dx,y+dy,z+d-.42+dz],[s,s,s],'#577c58',id,0,'leaf')
+  obstacles.push({x:x+.4,z:z+d-.42,w:.42,d:.42})
+  for(const [dz,tint] of [[1.05,'#6f8fa0'],[2.45,'#b99a6a']] as const){
+    box([x+.105,y+1.62,z+dz],[.03,.62,.86],'#4b382b',id)
+    box([x+.122,y+1.62,z+dz],[.008,.54,.78],tint,id)
+  }
+}
+// Open-plan workspace: desk rows against the long walls leave a 1.9 m aisle between them,
+// and the south row stops short of the break-room door.
+function workspace(box:Place,obstacles:Collision[],x:number,z:number,w:number,d:number,y:number,id:string){
+  for(const dx of [.9,2.6]) desk(box,obstacles,x+dx,z+.47,y,id)
+  for(const dx of [2.6,4.3]) desk(box,obstacles,x+dx,z+d-.47,y,id,1.35,false,Math.PI)
+  const storage=turn(box,x+.29,z+d/2,Math.PI/2)
+  obstacles.push({x:x+.29,z:z+d/2,w:.46,d:1.1})
+  storage([0,y+.52,0],[1.1,1.04,.46],'#c7c3b4',id)
+  for(const dx of [-.27,.27]) storage([dx,y+.52,.235],[.52,.98,.012],'#d8d4c5',id)
+  for(const dx of [-.06,.06]) storage([dx,y+.75,.245],[.018,.12,.02],C.metal,id)
+  box([x+.105,y+1.62,z+d/2],[.03,.9,1.6],C.white,id)
+  box([x+.122,y+1.62,z+d/2],[.008,.84,1.54],'#f4f4ee',id)
+  box([x+.135,y+1.18,z+d/2],[.05,.03,1.2],C.metal,id)
+  box([x+w-.4,y+.22,z+2.4],[.36,.44,.36],'#8a7462',id,0,'round')
+  for(const [dx,dy,dz,s] of [[0,.66,0,.5],[.08,.86,.05,.36]]) box([x+w-.4+dx,y+dy,z+2.4+dz],[s,s,s],'#577c58',id,0,'leaf')
+  obstacles.push({x:x+w-.4,z:z+2.4,w:.42,d:.42})
+}
+export function glazedDoor(box:Place,level:number,wallX:number,axis:number,width:number,badge:boolean,id?:string):Collision{
+  const opening=width-.14
+  const hinge=axis+width/2-.08
+  const panelX=wallX+opening/2,tip=wallX+opening-.03
+  for(const side of [-1,1]){
+    box([wallX-.013,level+1.055,axis+side*(width/2-.06)],[.19,2.11,.095],C.door,id)
+  }
+  box([wallX-.014,level+2.135,axis],[.19,.095,width+.032],C.door,id)
+  box([wallX,level+.018,axis],[.34,.022,width-.08],C.metal,id)
+  box([panelX,level+.462,hinge],[opening,.853,.061],'#5f786d',id)
+  box([panelX,level+1.47,hinge],[opening-.09,1.157,.054],'#a9c7c1',id,0,'box','glass')
+  for(const edge of [wallX+.028,tip]) box([edge,level+1.06,hinge],[.053,2.04,.084],C.door,id)
+  for(const y of [.042,.908,2.083]) box([panelX,level+y,hinge],[opening,.058,.086],C.door,id)
+  for(const side of [-1,1]){
+    box([tip-.047,level+1.043,hinge+side*.061],[.065,.22,.044],C.metal,id)
+    if(badge){
+      box([wallX+side*.143,level+1.075,axis-width/2-.14],[.075,.16,.092],C.rack,id)
+      box([wallX+side*.187,level+1.111,axis-width/2-.14],[.017,.023,.031],'#a0c98f',id,0,'box','light')
+    }
+  }
+  return {x:panelX,z:hinge,w:opening,d:.086}
 }
 function vestibule(box:Place,obstacles:Collision[],level:number,id:string){
   const {rect:[x,z,w,d],axis,innerDoor,outerDoor}=accessVestibule
   flooring(box,[x+.09,z+.09,w-.18,d-.18],level+.017,'#c0cabf',id,.025)
   flooring(box,[x+.85,axis-.64,1.47,1.28],level+.025,'#65796e',id,.018)
   for(let line=0;line<12;line++) box([x+.91+line*.121,level+.028,axis],[.02,.006,1.16],'#8b9c8e',id)
-  const doors=[{wallX:x,width:innerDoor},{wallX:x+w-.035,width:outerDoor}]
-  for(const {wallX,width} of doors){
-    const opening=width-.14
-    const hinge=axis+width/2-.08
-    const panelX=wallX+opening/2,tip=wallX+opening-.03
-    obstacles.push({x:panelX,z:hinge,w:opening,d:.086})
-    for(const side of [-1,1]){
-      box([wallX-.013,level+1.055,axis+side*(width/2-.06)],[.19,2.11,.095],C.door,id)
-    }
-    box([wallX-.014,level+2.135,axis],[.19,.095,width+.032],C.door,id)
-    box([wallX,level+.018,axis],[.34,.022,width-.08],C.metal,id)
-    box([panelX,level+.462,hinge],[opening,.853,.061],'#5f786d',id)
-    box([panelX,level+1.47,hinge],[opening-.09,1.157,.054],'#a9c7c1',id,0,'box','glass')
-    for(const edge of [wallX+.028,tip]) box([edge,level+1.06,hinge],[.053,2.04,.084],C.door,id)
-    for(const y of [.042,.908,2.083]) box([panelX,level+y,hinge],[opening,.058,.086],C.door,id)
-    for(const side of [-1,1]){
-      box([tip-.047,level+1.043,hinge+side*.061],[.065,.22,.044],C.metal,id)
-      box([wallX+side*.143,level+1.075,axis-width/2-.14],[.075,.16,.092],C.rack,id)
-      box([wallX+side*.187,level+1.111,axis-width/2-.14],[.017,.023,.031],'#a0c98f',id,0,'box','light')
-    }
-  }
+  obstacles.push(glazedDoor(box,level,x,axis,innerDoor,true,id),glazedDoor(box,level,x+w-.035,axis,outerDoor,true,id))
 }
 function coolingPipeRack(box:Place,obstacles:Collision[],x:number,z:number,floor:number,id:string){
   const span=6.68,depth=1.14,base=floor+.14,centerX=x+span/2
@@ -255,7 +363,7 @@ export function staircase(){
   finish(group)
   return group
 }
-function workshop(box:Place,obstacles:Collision[],x:number,z:number,level:number){
+function workshop(box:Place,obstacles:Collision[],x:number,z:number,south:number,level:number){
   const id='delivery',rackX=x+1.02,rackZ=z+4.66,depth=5.15
   const place=(px:number,y:number,pz:number,size:Point,color:string)=>
     box([px,level+y,pz],size,color,id)
@@ -323,7 +431,7 @@ function workshop(box:Place,obstacles:Collision[],x:number,z:number,level:number
   place(benchX-.06,.92,cartZ-.236,[.136,.036,.054],C.rack)
   place(benchX+.09,.89,cartZ+.217,[.23,.153,.31],'#668276')
   // Mark the loading bay at the side, clear of the aisle between the two doors.
-  const stagingZ=z+7.88
+  const stagingZ=south-1.73
   for(const side of [-1,1]){
     place(x+1.02,.024,stagingZ+side*.57,[1.47,.009,.055],'#b99b52')
     place(x+1.02+side*.716,.024,stagingZ,[.055,.009,1.18],'#b99b52')
@@ -335,9 +443,11 @@ function workshop(box:Place,obstacles:Collision[],x:number,z:number,level:number
   place(x+1.02,.412,stagingZ,[.85,.49,.69],'#a39b81')
   place(x+1.02,.665,stagingZ,[.084,.019,.69],'#545e54')
   obstacles.push({x:x+1.02,z:stagingZ,w:1.14,d:.9})
+  for(let i=0;i<6;i++) place(loadingDoor.opening[0],.024,south-2.05+i*.27,[.22,.019,.15],'#80a897')
 }
 function fireSuppression(box:Place,obstacles:Collision[],floor:number){
-  const id='fire',x=-18.92,z=-3.62,red='#aa4339',frame='#495953',metal='#9ca59a',brass='#ba9661'
+  const id='fire',red='#aa4339',frame='#495953',metal='#9ca59a',brass='#ba9661'
+  const [x,,z]=equipment.find(asset=>asset.id===id)!.position
   const at=(dx:number,y:number,dz:number):Point=>[x+dx,floor+y,z+dz]
   const place=(dx:number,y:number,dz:number,size:Point,tint:string,shape:'box'|'round'|'sphere'='box',pitch=0)=>
     box(at(dx,y,dz),size,tint,id,0,shape,'solid',pitch)
@@ -434,9 +544,7 @@ export function interior(floor:'ground'|'upper',cap:Capacity,visibleIds?:Readonl
       for(const dz of [3.12,5.07]) flooring(box,[x+.5,z+dz,w-2.1,.14],level+.025,'#c4a570',room.id)
     }
     if(room.id==='cooling'){
-      for(let i=0;i<4;i++){
-        cabinet(box,obstacles,x+1.2+i*1.63,z+2,1.03,1.88,.83,room.id,'#7c9591',8)
-      }
+      for(const offset of [1.13,3.62,5.18,6.74]) cabinet(box,obstacles,x+offset,z+2,1.03,1.88,.83,room.id,'#7c9591',8)
       coolingPipeRack(box,obstacles,x+.73,z+6.31,level+.012,room.id)
       box([-5.8,level+.062,5],[.35,.10,.23],'#568b81','leak')
     }
@@ -450,7 +558,7 @@ export function interior(floor:'ground'|'upper',cap:Capacity,visibleIds?:Readonl
       segment(box,[x+.75,2.4,z+.75],[x+w-1.3,2.4,z+.75],.25,'#5d6d68',.14,room.id)
     }
     if(room.id==='noc'){
-      for(let i=0;i<3;i++) desk(box,obstacles,x+1.52+i*1.79,z+4.05,level,room.id,1.47,true)
+      for(let i=0;i<3;i++) desk(box,obstacles,x+1.2+i*1.79,z+4.05,level,room.id,1.47,true)
       for(let i=0;i<4;i++){
         const screenX=x+.96+i*1.54
         box([screenX,1.68,z+.52],[1.39,.81,.13],C.rack,room.id)
@@ -478,31 +586,39 @@ export function interior(floor:'ground'|'upper',cap:Capacity,visibleIds?:Readonl
       box([x+1.83,level+.47,z+1.28],[.26,.023,.17],'#dedecb',id,-.2)
       vestibule(box,obstacles,level,id)
     }
-    if(room.id==='delivery') workshop(box,obstacles,x,z,level)
+    if(room.id==='delivery') workshop(box,obstacles,x,z,z+d,level)
     if(room.id==='utility') for(let i=0;i<3;i++) cabinet(box,obstacles,x+1.16+i*1.1,z+1.5,.82,1.6,.75,room.id,'#91a499',1)
-    if(room.id==='offices'){desk(box,obstacles,x+1.65,z+1.5,level,room.id);desk(box,obstacles,x+3.75,z+1.5,level,room.id)}
-    if(room.id==='shared') for(const dx of [1.45,3.45,5.45]) desk(box,obstacles,x+dx,z+1.55,level,room.id)
+    if(room.id==='offices') directorOffice(box,obstacles,x,z,w,d,level,room.id)
+    if(room.id==='shared') workspace(box,obstacles,x,z,w,d,level,room.id)
     if(room.id==='meeting'){
-      obstacles.push({x:x+2.4,z:z+2.08,w:2.38,d:1.05})
-      box([x+2.4,level+.78,z+2.08],[2.38,.13,1.05],'#b0956b',room.id)
-      for(const dx of [1.53,3.27]) box([x+dx,level+.365,z+2.08],[.10,.73,.66],C.metal,room.id)
-      box([x+2.4,level+.854,z+2.08],[.31,.018,.12],C.door,room.id)
+      const tableZ=z+1.6
+      obstacles.push({x:x+2.4,z:tableZ,w:2.38,d:1.05})
+      box([x+2.4,level+.78,tableZ],[2.38,.13,1.05],'#b0956b',room.id)
+      for(const dx of [1.53,3.27]) box([x+dx,level+.365,tableZ],[.10,.73,.66],C.metal,room.id)
+      box([x+2.4,level+.854,tableZ],[.31,.018,.12],C.door,room.id)
       for(const dx of [1.54,2.41,3.28]){
-        chair(box,x+dx,z+1.13,level,room.id,Math.PI,true)
-        chair(box,x+dx,z+2.99,level,room.id,0,true)
+        chair(box,x+dx,tableZ-.93,level,room.id,Math.PI,true)
       }
+      for(const dx of [1.54,3.28]){
+        chair(box,x+dx,tableZ+.93,level,room.id,0,true)
+        obstacles.push({x:x+dx,z:tableZ+1,w:.48,d:.52})
+      }
+      chair(box,x+.65,tableZ,level,room.id,-Math.PI/2,true)
     }
     if(room.id==='break'){
-      box([x+1.9,level+.69,z+1.59],[1.56,.105,.92],'#ac946f',room.id)
-      box([x+1.9,level+.32,z+1.59],[.107,.64,.107],C.metal,room.id,0,'round')
-      box([x+1.9,level+.035,z+1.59],[.59,.069,.59],C.metal,room.id,0,'round')
-      for(const dx of [1.2,2.6]) chair(box,x+dx,z+2.3,level,room.id,0,true)
+      const tableX=x+2.04,tableZ=z+1.59,tableW=1.36
+      obstacles.push({x:tableX,z:tableZ,w:tableW,d:.92})
+      box([tableX,level+.69,tableZ],[tableW,.105,.92],'#ac946f',room.id)
+      box([tableX,level+.32,tableZ],[.107,.64,.107],C.metal,room.id,0,'round')
+      box([tableX,level+.035,tableZ],[.59,.069,.59],C.metal,room.id,0,'round')
+      for(const dx of [-.57,.57]) chair(box,tableX+dx,z+2.3,level,room.id,0,true)
     }
     if(room.id==='restroom'){
-      obstacles.push({x:x+1.42,z:z+.46,w:2.5,d:.62})
-      box([x+1.42,level+.41,z+.46],[2.44,.8,.58],'#729087',room.id)
-      box([x+1.42,level+.838,z+.46],[2.5,.064,.62],C.trim,room.id)
-      for(const dx of [.72,2.06]){
+      const vanityX=x+w/2,vanityW=w-.28
+      obstacles.push({x:vanityX,z:z+.46,w:vanityW,d:.62})
+      box([vanityX,level+.41,z+.46],[vanityW-.06,.8,.58],'#729087',room.id)
+      box([vanityX,level+.838,z+.46],[vanityW,.064,.62],C.trim,room.id)
+      for(const dx of [w*.27,w*.73]){
         box([x+dx,level+.879,z+.49],[.48,.045,.337],C.white,room.id,0,'sphere')
         box([x+dx,level+.898,z+.51],[.34,.021,.21],'#bbc7bd',room.id,0,'sphere')
         box([x+dx,level+.965,z+.31],[.052,.18,.052],C.metal,room.id)
@@ -518,12 +634,11 @@ export function interior(floor:'ground'|'upper',cap:Capacity,visibleIds?:Readonl
   if(floor==='ground'){
     fireSuppression(box,obstacles,level)
     for(let i=0;i<7;i++) box([-17.4-i*.37,slab+.024,-.95],[.19,.019,.15],'#80a897')
-    for(let i=0;i<6;i++) box([5.5,slab+.024,10.45+i*.27],[.22,.019,.15],'#80a897')
   }else{
     const [x,z,w,d]=stairs.opening
     const edges=[[x,z,x,z+d],[x+w,z,x+w,z+d],[x,z+d,x+w,z+d]]
     for(const [ax,az,bx,bz] of edges){
-      segment(box,[ax,level+.99,az],[bx,level+.99,bz],.065,C.door,.062)
+      segment(box,[ax,level+.99,az],[bx,level+.99,bz],stairs.railWidth,C.door,.062)
       segment(box,[ax,level+.47,az],[bx,level+.47,bz],.045,C.door,.044)
       const posts=Math.ceil(Math.hypot(bx-ax,bz-az)/1.3)
       for(let i=0;i<=posts;i++) box([T.MathUtils.lerp(ax,bx,i/posts),level+.49,T.MathUtils.lerp(az,bz,i/posts)],[.058,.98,.058],C.door)

@@ -1,6 +1,6 @@
 import { test,expect,type Locator,type Page } from '@playwright/test'
 import { OrthographicCamera,Vector3 } from 'three'
-import { property } from '../src/model'
+import { eastGroundDoors,property,stairSideDoors,utilityDoor,visitorArrival } from '../src/model'
 import type { ModelSnapshot } from '../src/viewState'
 
 const nav=(page:Page)=>page.getByRole('navigation',{name:'Navigation principale'})
@@ -20,6 +20,18 @@ async function open(page:Page){
   await expect(page.getByRole('heading',{name:'Projet de centre de données'})).toBeVisible()
   await expect(draw(page).locator('canvas[role=img]')).toBeVisible()
   await expect.poll(async()=>Number(await draw(page).getAttribute('data-draw-calls'))).toBeGreaterThan(0)
+}
+async function walkUntil(page:Page,key:string,axis:0|2,limit:number,direction:1|-1){
+  await page.keyboard.down(key)
+  try{
+    await page.waitForFunction(({key,axis,limit,direction})=>{
+      const value=document.querySelector<HTMLElement>('[data-walk-position]')?.dataset.walkPosition
+      if(!value||(JSON.parse(value)[axis]-limit)*direction<0) return false
+      // Stop on this frame so delays in the test driver cannot carry the camera past a doorway.
+      window.dispatchEvent(new KeyboardEvent('keyup',{key}))
+      return true
+    },{key,axis,limit,direction},{timeout:35_000})
+  }finally{await page.keyboard.up(key)}
 }
 async function choose(page:Page,menu:string,option:string|RegExp){
   await tools(page).getByRole('button',{name:menu,exact:true}).click()
@@ -213,46 +225,106 @@ test('le parcours isole les équipements concernés et affiche sa légende',asyn
   await expect.poll(triangles).toBeGreaterThanOrEqual(total)
 })
 
-test('la visite à pied part du parking, passe par l’accueil et monte par l’escalier',async({page})=>{
-  test.setTimeout(85_000)
+test('la visite à pied part du sas et l’accès à l’escalier est réservé au personnel',async({page})=>{
+  test.setTimeout(105_000)
   await page.setViewportSize({width:1024,height:560})
   await open(page)
   await page.getByRole('button',{name:'Passer en visite à pied'}).click()
   const location=page.getByRole('status',{name:'Position dans la maquette'})
-  await expect(location).toContainText('Stationnement')
+  await expect(location).toContainText('Entrée des visiteurs')
   await expect(location).toContainText('Extérieur')
-  async function walkUntil(key:string,axis:0|2,limit:number,direction:1|-1){
-    await page.keyboard.down(key)
-    try{
-      await page.waitForFunction(({axis,limit,direction})=>{
-        const value=document.querySelector<HTMLElement>('[data-walk-position]')?.dataset.walkPosition
-        return value&&(JSON.parse(value)[axis]-limit)*direction>=0
-      },{axis,limit,direction},{timeout:20_000})
-    }finally{await page.keyboard.up(key)}
-  }
-  await walkUntil('w',0,22,1)
-  await walkUntil('a',2,3.25,-1)
-  await walkUntil('s',0,18.13,-1)
+  await expect.poll(async()=>JSON.parse((await draw(page).getAttribute('data-walk-position'))!)).toEqual([visitorArrival.x,1.77,visitorArrival.z])
+  await walkUntil(page,'w',0,18.13,-1)
   await expect(location).toContainText('Sas d’accès')
-  await walkUntil('s',0,16,-1)
+  await walkUntil(page,'w',0,16,-1)
   await expect(location).toContainText('Accueil et contrôle d’accès')
-  await walkUntil('w',0,21.9,1)
-  await expect(location).toContainText('Circulation extérieure')
-  await walkUntil('d',2,11.2,1)
-  await walkUntil('s',0,18.47,-1)
-  await walkUntil('a',2,8.45,-1)
+  await walkUntil(page,'s',0,21.9,1)
+  await expect(location).toContainText('Entrée des visiteurs')
+  await walkUntil(page,'a',2,eastGroundDoors.stairs[0]-.15,1)
+  await walkUntil(page,'w',0,20.6,-1)
+  const prompt=page.locator('.access-prompt'),dialog=page.getByRole('dialog',{name:'Escalier du personnel'})
+  await expect(prompt).toContainText('Lecteur d’empreinte')
+  await page.keyboard.press('e')
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button',{name:'Simuler la lecture d’empreinte'}).click()
+  await expect(dialog).toBeHidden()
+  await expect.poll(()=>page.evaluate(()=>document.pointerLockElement===null)).toBe(true)
+  await expect(prompt).toContainText('Porte ouverte')
+  await walkUntil(page,'w',0,18.47,-1)
+  await walkUntil(page,'d',2,8.45,-1)
   await expect(location).toContainText('Escalier')
-  await walkUntil('a',2,5.65,-1)
+  await walkUntil(page,'d',2,5.65,-1)
   const upper=JSON.parse((await draw(page).getAttribute('data-walk-position'))!)
   expect(upper[1]).toBeCloseTo(1.77+property.technicalHeight,2)
   await expect(location).toContainText('Premier étage')
   await expect(location).toContainText('Palier et circulation')
-  await walkUntil('d',2,11.3,1)
+  await walkUntil(page,'w',0,16.55,-1)
+  await walkUntil(page,'a',2,stairSideDoors.shared.at-.15,1)
+  await walkUntil(page,'w',0,14.9,-1)
+  await expect(location).toContainText('Espace de travail')
+  await walkUntil(page,'s',0,16.55,1)
+  await walkUntil(page,'a',2,stairSideDoors.restroom.at-.15,1)
+  await walkUntil(page,'w',0,14.9,-1)
+  await expect(location).toContainText('Sanitaires')
+  await walkUntil(page,'s',0,16.55,1)
+  await walkUntil(page,'d',2,5.65,-1)
+  await walkUntil(page,'s',0,18.45,1)
+  await walkUntil(page,'a',2,11.3,1)
   const ground=JSON.parse((await draw(page).getAttribute('data-walk-position'))!)
   expect(ground[1]).toBeCloseTo(1.77,2)
+  await walkUntil(page,'a',2,utilityDoor.at-.15,1)
+  await walkUntil(page,'w',0,16.4,-1)
+  await expect(location).toContainText('Locaux de service')
   await page.keyboard.press('Escape')
   await expect(location).toHaveCount(0)
   await expect(draw(page)).not.toHaveAttribute('data-walk-position',/.+/)
+})
+
+test('le quai attend le camion avant d’ouvrir la porte coulissante',async({page})=>{
+  test.setTimeout(105_000)
+  await page.setViewportSize({width:1024,height:560})
+  await open(page)
+  await page.getByRole('button',{name:'Passer en visite à pied'}).click()
+  const prompt=page.locator('.access-prompt')
+  await walkUntil(page,'a',2,13.06,1)
+  await walkUntil(page,'w',0,5.7,-1)
+  await expect(prompt).toContainText('Simuler l’arrivée du camion')
+  await page.emulateMedia({reducedMotion:'no-preference'})
+  await page.keyboard.press('e')
+  await expect(prompt).toContainText('Camion en approche')
+  await page.keyboard.press('e')
+  await expect(prompt).toContainText('Ouvrir le quai',{timeout:35_000})
+  await page.keyboard.press('e')
+  await expect(prompt).toContainText('Porte ouverte',{timeout:10_000})
+  await walkUntil(page,'d',2,11.43,-1)
+  const location=page.getByRole('status',{name:'Position dans la maquette'})
+  await expect(location).toContainText('Livraison et maintenance')
+  await expect(prompt).toContainText('Ouvrir le quai',{timeout:15_000})
+  await walkUntil(page,'d',2,8.5,-1)
+  await expect(location).toContainText('Livraison et maintenance')
+})
+
+test('la caméra reprend la souris en plein écran après le contrôle d’accès',async({page})=>{
+  test.setTimeout(65_000)
+  await open(page)
+  await page.getByRole('button',{name:'Plein écran'}).click()
+  await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement))).toBe(true)
+  await page.getByRole('button',{name:'Passer en visite à pied'}).click()
+  await walkUntil(page,'a',2,eastGroundDoors.stairs[0]-.15,1)
+  await walkUntil(page,'w',0,20.6,-1)
+
+  const canvas=draw(page).locator('canvas[role=img]')
+  const locked=()=>canvas.evaluate(node=>document.pointerLockElement===node)
+  await canvas.click()
+  await expect.poll(locked).toBe(true)
+  await page.keyboard.press('e')
+  const reader=page.getByRole('dialog',{name:'Escalier du personnel'})
+  await expect(reader).toBeVisible()
+  await expect.poll(locked).toBe(false)
+  await reader.getByRole('button',{name:'Simuler la lecture d’empreinte'}).click()
+  await expect(reader).toBeHidden()
+  await expect.poll(locked).toBe(true)
+  await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement))).toBe(true)
 })
 
 test('la simulation cadre le scénario et attend les étapes manuelles',async({page})=>{

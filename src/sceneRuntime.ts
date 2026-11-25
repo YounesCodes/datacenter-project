@@ -1,16 +1,19 @@
 import * as T from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { center,coordinates,equipment,normalRoutes,property,rackPositions,rooms,topology,visitorArrival,walkHeight,walkZoneAt,type Floor,type Layer,type Point,type WalkZone } from './model'
+import { center,coordinates,equipment,normalRoutes,property,rackPositions,rooms,topology,visitorArrival,walkHeight,walkZoneAt,type AuthenticatedDoor,type Floor,type Layer,type Point,type SecureDoor,type WalkZone } from './model'
 import { bounds,disposeGeometry,geometry,visibleFloor,type Geometry } from './siteGeometry'
 import { disposeGroup,type Picks } from './geometryTools'
 import type { Capacity,Inputs } from './engineering'
 import type { Phase } from './model'
 import { assignLanes,offsetPolyline } from './flowLanes'
 import { flowMotion,lineDashes,routeStyle,type FlowFocus,type LineStyle } from './flowPresentation'
+import { doorBlocks,doorLocal,inDoorSwing,setDoorOpening,type WalkDoor } from './accessGeometry'
+import { deliveryPose,truckBlocks } from './deliveryMotion'
 
 import type { CameraAction,ModelSnapshot } from './viewState'
 type Trace={route:string;sequence:number}
 export type SceneState={cap:Capacity;inputs:Inputs;phase:Phase;floor:Floor;target:string|null;labels:boolean;isolated:boolean;layer:Layer|null;focus:FlowFocus|null;routes:string[]|null;emphasis:string[]|null;trace:Trace|null;hour:number;walk:boolean;economy:boolean;tool:'select'|'pan';anchor:string|null;active?:boolean}
+export type AccessPrompt={door:SecureDoor;action:'verify'|'open'|'wait'|'moving'|'pass'|'call-delivery'|'truck-arriving'}
 const traceDuration=1700
 const overviewDirection:Point=[.77,.85,1]
 const labelsByRoom:Record<string,Point>={
@@ -35,7 +38,8 @@ function lineFor(route:string,keys:string[],style:LineStyle){
 type Path=ReturnType<typeof lineFor>
 const motion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHost:HTMLDivElement,onPick:(id:string)=>void,onWalkExit:()=>void,onWalkZone:(zone:WalkZone|null)=>void){
+export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHost:HTMLDivElement,onPick:(id:string)=>void,onWalkExit:()=>void,onWalkZone:(zone:WalkZone|null)=>void,
+  onAccessPrompt:(prompt:AccessPrompt|null)=>void,onAccessRequest:(door:AuthenticatedDoor|null)=>void){
   const hud=host.closest('.board-stage')?.querySelector('.board-hud')
   const world=new T.Scene()
   const camera=new T.OrthographicCamera()
@@ -132,6 +136,113 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
   }
   const walkingEye=1.77
   let walkZoneId:string|null=null
+  let accessPrompt:AccessPrompt|null=null,pendingAccess:WalkDoor|null=null
+  let resumeMouseLook=false
+  let deliveryRequested=false,deliveryProgress=0
+  function placeTruck(){
+    const truck=building?.truck
+    if(!truck) return
+    const [x,z,yaw]=deliveryPose(inWalk()?deliveryProgress:1)
+    truck.position.set(x,0,z)
+    truck.rotation.y=yaw
+    truck.visible=!inWalk()||deliveryRequested
+    renderer.shadowMap.needsUpdate=true
+  }
+  function stepDelivery(elapsed:number){
+    if(!deliveryRequested||deliveryProgress===1||!building?.truck) return false
+    const reduced=motion(),next=reduced?1:Math.min(1,deliveryProgress+Math.min(elapsed,.16)/8.5)
+    const {x,y,z}=eye.position
+    if(y<walkingEye+.22&&(truckBlocks(deliveryPose(next),x,z)||!reduced&&truckBlocks(deliveryPose((deliveryProgress+next)/2),x,z))) return false
+    deliveryProgress=next
+    placeTruck();dirty=true
+    return next<1
+  }
+  function doorPresent(){
+    if(!inWalk()||eye.position.y>walkingEye+.22) return
+    const {x,z}=eye.position
+    let nearest:WalkDoor|undefined,range=1.55
+    for(const door of building?.access?.doors??[]){
+      const [along,across]=doorLocal(door.spec,x,z)
+      const distance=Math.hypot(along*1.3,across)
+      if(distance<range){range=distance;nearest=door}
+    }
+    return nearest
+  }
+  function openOrMoving(door:WalkDoor){return door.openUntil>0||door.progress>0}
+  function companionOf(door:WalkDoor){return building?.access?.doors.find(other=>other.spec.id===door.spec.companion)}
+  function doorAction(door:WalkDoor):AccessPrompt['action']{
+    if(openOrMoving(door)) return door.progress===1?'pass':'moving'
+    if(door.spec.method==='delivery') return deliveryProgress===1&&building?.truck?.visible?'open':deliveryRequested?'truck-arriving':'call-delivery'
+    const other=companionOf(door)
+    if(other&&openOrMoving(other)) return 'wait'
+    return !door.spec.inner&&doorLocal(door.spec,eye.position.x,eye.position.z)[1]*door.spec.outside>0?'verify':'open'
+  }
+  function updateAccessPrompt(){
+    const door=doorPresent(),action=door&&doorAction(door)
+    if(accessPrompt?.door===door?.spec&&accessPrompt?.action===action) return
+    accessPrompt=door&&action?{door:door.spec,action}:null
+    onAccessPrompt(accessPrompt)
+  }
+  function releaseDoor(door:WalkDoor){
+    door.openedFrom=doorLocal(door.spec,eye.position.x,eye.position.z)[1]<0?-1:1
+    // Start the hold timer only when the door has reached its open position.
+    door.openUntil=Infinity
+  }
+  function lockWalkPointer(){
+    const canvas=renderer.domElement
+    if(document.pointerLockElement===canvas) return
+    try{Promise.resolve(canvas.requestPointerLock?.()).catch(()=>{})}catch{/* dragging still works */}
+  }
+  function restoreAccessPointer(){
+    if(pendingAccess&&resumeMouseLook&&inWalk()) lockWalkPointer()
+  }
+  function startAccess(){
+    const door=doorPresent()
+    if(!door||pendingAccess) return
+    const action=doorAction(door)
+    if(action==='call-delivery'){deliveryRequested=true;placeTruck()}
+    if(action==='open') releaseDoor(door)
+    if(action==='wait'){
+      const other=companionOf(door)
+      if(other?.progress===1&&!inDoorSwing(other,eye.position.x,eye.position.z)) other.openUntil=0
+    }
+    if(action==='verify'&&door.spec.method!=='delivery'){
+      pendingAccess=door;keys.clear();down=null;drag=null
+      resumeMouseLook=document.pointerLockElement===renderer.domElement
+      if(resumeMouseLook) document.exitPointerLock()
+      onAccessRequest(door.spec)
+    }
+    invalidate()
+  }
+  function finishAccess(approved:boolean){
+    const door=pendingAccess
+    if(!door) return
+    pendingAccess=null
+    resumeMouseLook=false
+    onAccessRequest(null)
+    if(approved&&door===doorPresent()&&doorAction(door)==='verify') releaseDoor(door)
+    requestAnimationFrame(()=>{if(inWalk()&&!pendingAccess) renderer.domElement.focus()})
+    invalidate()
+  }
+  function stepDoors(now:number,dt:number){
+    let active=false
+    for(const door of building?.access?.doors??[]){
+      if(!openOrMoving(door)) continue
+      if(door.openUntil<=now) door.openUntil=0
+      const {x,z}=eye.position
+      const [along,across]=doorLocal(door.spec,x,z)
+      const approach=across*door.openedFrom
+      const nearThreshold=approach>=0&&approach<1.25&&Math.abs(along)<door.spec.width/2
+      const hold=door.progress===1&&(nearThreshold||inDoorSwing(door,x,z))
+      const goal=door.openUntil||hold?1:0
+      const step=motion()?1:dt*(door.slides?1.2:2.7)
+      const progress=goal?Math.min(1,door.progress+step):Math.max(0,door.progress-step)
+      if(progress!==door.progress){setDoorOpening(door,progress);dirty=true;renderer.shadowMap.needsUpdate=true}
+      if(progress===1&&door.openUntil===Infinity) door.openUntil=now+(door.slides?7200:2800)
+      active||=door.openUntil>0||progress!==goal
+    }
+    return active
+  }
   function updateWalkZone(){
     const {x,y,z}=eye.position
     const zone=walkZoneAt(x,z,y-walkingEye)
@@ -145,6 +256,8 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     if(level===null||Math.abs(level-current)>.24||Math.abs(x)>28.55||Math.abs(z)>20.82) return
     const obstacles=level>=property.technicalHeight-.06?building?.upperCollision:building?.collision
     if(obstacles?.some(rect=>Math.abs(x-rect.x)<rect.w/2+.25&&Math.abs(z-rect.z)<rect.d/2+.25)) return
+    if(level<.22&&building?.access?.doors.some(door=>doorBlocks(door,x,z))) return
+    if(level<.22&&building?.truck?.visible&&truckBlocks(deliveryPose(deliveryProgress),x,z)) return
     eye.position.set(x,level+walkingEye,z)
   }
   function walk(dt:number){
@@ -224,6 +337,9 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     const dt=Math.min(.05,delta/1000)
     last=now
     if(inWalk()&&keys.size){walk(dt);dirty=true}
+    const doorsActive=inWalk()&&stepDoors(now,dt)
+    const truckActive=inWalk()&&stepDelivery(delta/1000)
+    if(inWalk()) updateAccessPrompt()
     if(move){
       const t=Math.min(1,(now-move.start)/(motion()?1:640))
       const k=1-Math.pow(1-t,3)
@@ -249,7 +365,7 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     if(!inWalk()&&control.update()) dirty=true
     const redraw=Boolean(dirty||move||lighting||installationStart||(inWalk()&&keys.size))
     if(redraw){
-      setResolution(Boolean(state?.economy),interacting||Boolean(move||(inWalk()&&keys.size)))
+      setResolution(Boolean(state?.economy),interacting||truckActive||Boolean(move||(inWalk()&&keys.size)))
       renderer.render(world,activeCamera())
       updateLabels()
       const metrics=renderer.info.render
@@ -270,7 +386,7 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     const flowDue=flowing&&now-lastFlowDraw>=(state?.economy?66:33)
     if(redraw||tracing||wasTracing||flowDue){drawFlow();lastFlowDraw=now}
     wasTracing=tracing&&flowTime<traceDuration
-    if(move||lighting||installationStart||(inWalk()&&keys.size)||wasTracing||flowing) requestFrame()
+    if(move||lighting||installationStart||doorsActive||truckActive||(inWalk()&&keys.size)||wasTracing||flowing) requestFrame()
   }
   function drawFlow(){
     const ctx=flowContext
@@ -421,6 +537,7 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
       installationStart=animate?performance.now():0
       if(installationStart) building.incoming.scale.y=.04
       world.add(building.exterior,building.stairs,building.ceilings,building.ground,building.upper,building.roof)
+      placeTruck()
       renderer.shadowMap.needsUpdate=true
     }
     visibleFloor(building,next.floor)
@@ -485,13 +602,18 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     if(!old||old.economy!==next.economy) configureQuality(next.economy)
     if(next.walk!==old?.walk){
       control.enabled=!next.walk
+      deliveryRequested=false;deliveryProgress=0;placeTruck()
       if(next.walk){
         eye.position.set(visitorArrival.x,walkingEye,visitorArrival.z)
-        eye.rotation.set(0,visitorArrival.yaw,0)
+        eye.rotation.set(visitorArrival.pitch,visitorArrival.yaw,0)
         renderer.domElement.focus()
         updateWalkZone()
       }else{
         if(walkZoneId!==null){walkZoneId=null;onWalkZone(null)}
+        if(accessPrompt){accessPrompt=null;onAccessPrompt(null)}
+        if(pendingAccess){pendingAccess=null;onAccessRequest(null)}
+        resumeMouseLook=false
+        for(const door of building.access?.doors??[]){door.openUntil=0;setDoorOpening(door,0)}
         delete host.dataset.walkPosition;keys.clear()
         if(document.pointerLockElement===renderer.domElement) document.exitPointerLock()
       }
@@ -573,11 +695,12 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     for(const hit of candidates){
       if(!(hit.object instanceof T.InstancedMesh)||hit.instanceId===undefined||renderer.clippingPlanes.some(plane=>plane.distanceToPoint(hit.point)<0)) continue
       const id=(hit.object as Picks).userData.ids?.[hit.instanceId]
+      if(id===false) return
       if(id&&bounds(id)){onPick(id);return}
     }
   }
   function pointerDown(event:PointerEvent){
-    if(event.button!==0) return
+    if(event.button!==0||pendingAccess) return
     down={x:event.clientX,y:event.clientY}
     if(inWalk()) drag={x:event.clientX,y:event.clientY}
     else move=null
@@ -585,24 +708,27 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
   function pointerUp(event:PointerEvent){
     if(down&&Math.hypot(event.clientX-down.x,event.clientY-down.y)<6){
       if(inWalk()){
-        if(!document.pointerLockElement) {
-          try{Promise.resolve(renderer.domElement.requestPointerLock?.()).catch(()=>{})}catch{/* dragging still works */}
-        }
-      } else pick(event)
+        if(!pendingAccess&&!document.pointerLockElement) lockWalkPointer()
+      }else pick(event)
     }
     down=null;drag=null
   }
   function pointerMove(event:PointerEvent){
-    if(!inWalk()||(!drag&&document.pointerLockElement!==renderer.domElement)) return
+    if(!inWalk()||pendingAccess||(!drag&&document.pointerLockElement!==renderer.domElement)) return
     const dx=drag?event.clientX-drag.x:event.movementX,dy=drag?event.clientY-drag.y:event.movementY
     eye.rotation.y-=dx*.0034;eye.rotation.x=T.MathUtils.clamp(eye.rotation.x-dy*.0034,-1.3,1.3)
     if(drag) drag={x:event.clientX,y:event.clientY}
     invalidate()
   }
   function keyDown(event:KeyboardEvent){
-    if(!inWalk()) return
+    if(!inWalk()||pendingAccess) return
     const key=event.key.toLowerCase()
     if(key==='escape'){onWalkExit();return}
+    if(key==='e'){
+      event.preventDefault()
+      if(!event.repeat) startAccess()
+      return
+    }
     if(!['w','a','s','d','z','q','arrowup','arrowdown','arrowleft','arrowright'].includes(key)) return
     event.preventDefault();keys.add(key);requestFrame()
   }
@@ -623,7 +749,7 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
   window.addEventListener('pointerup',pointerUp);window.addEventListener('pointermove',pointerMove)
   window.addEventListener('keydown',keyDown);window.addEventListener('keyup',keyUp);window.addEventListener('blur',blur)
   fit()
-  return {apply,action,dispose(){
+  return {apply,action,startAccess,restoreAccessPointer,finishAccess,dispose(){
     disposed=true;cancelAnimationFrame(frame);clearTimeout(settleTimer);floorFade?.cancel();observer.disconnect();control.dispose();setRoutes(null,null,[])
     hud?.removeEventListener('toggle',invalidate,true)
     if(document.pointerLockElement===canvas) document.exitPointerLock()

@@ -1,11 +1,12 @@
 import * as T from 'three'
-import { center,equipment,property,rackPositions,rooms,specs,technicalPorts,upperSlabs,type Floor,type Phase,type Point,type Rect } from './model'
+import { center,deliveryTruck,eastGroundDoors,equipment,facadeDoors,property,rackPositions,rooms,siteAccess,specs,staffStairDoor,technicalPorts,upperSlabs,type Floor,type Phase,type Point,type Rect } from './model'
 import type { Capacity,Inputs,PopulatedRack } from './engineering'
 import { batch,cableGland,colors as C,disposeGroup,flooring,slab,type Place } from './geometryTools'
-import { interior,staircase,walls } from './roomsGeometry'
+import { glazedDoor,interior,staircase,walls } from './roomsGeometry'
 import { outdoor } from './outdoorGeometry'
-import { fuelTankFootprint } from './outdoorDetails'
+import { boxTruck,fuelTankFootprint } from './outdoorDetails'
 import type { FlowFocus } from './flowPresentation'
+import { accessGeometry } from './accessGeometry'
 
 function rackShell(box:Place,rack:PopulatedRack){
   const [x,,z]=rack.position,{width:w,depth:d,height:h}=specs.rack
@@ -98,6 +99,7 @@ function roof(solar:number,focus?:FlowFocus|null){
     box([x,y,12.645],[.057,1.12,.045],C.trim)
   }
   finish(group)
+  if(!focus) group.add(accessGeometry(facadeDoors).group)
   return group
 }
 function walkCeilings(){
@@ -120,24 +122,66 @@ function walkCeilings(){
   group.visible=false
   return group
 }
+function upperFoundation(){
+  const group=new T.Group(),{box,finish}=batch()
+  const [x,z,w,d]=property.upper,east=x+w,height=property.technicalHeight
+  const openings=[eastGroundDoors.reception,eastGroundDoors.stairs]
+  const paint='#d5d6ca',head=slab+2.2
+  for(const [px,pz,pw,pd] of upperSlabs){
+    if(px+pw!==east){
+      flooring(box,[px,pz,pw,pd],height,paint,undefined,height)
+      continue
+    }
+    const reveal=Math.min(.66,pw),back=pw-reveal
+    if(back>0) flooring(box,[px,pz,back,pd],height,paint,undefined,height)
+    const end=pz+pd
+    const jambs=openings.flatMap(([axis,width])=>[axis-width/2,axis+width/2]).filter(edge=>pz<edge&&edge<end)
+    const stops=[pz,...jambs.sort((a,b)=>a-b),end]
+    for(let i=1;i<stops.length;i++){
+      const start=stops[i-1],span=stops[i]-start
+      const rect:Rect=[east-reveal,start,reveal,span]
+      const doorway=openings.some(([axis,width])=>Math.abs(start+span/2-axis)<width/2)
+      flooring(box,rect,height,paint,undefined,doorway?height-head:height)
+      if(doorway) flooring(box,rect,slab,'#dfdacb',undefined,slab)
+    }
+  }
+  const [axis,width]=eastGroundDoors.reception
+  glazedDoor(box,slab,east-.035,axis,width,true)
+  for(let i=0;i<4;i++) box([x+w*(i+.5)/4,2.32,z+d+.04],[w*.17,1.12,.075],'#859b93')
+  finish(group)
+  group.add(accessGeometry([staffStairDoor]).group)
+  return group
+}
+
+function stagedTruck(){
+  const truck=new T.Group(),body=new T.Group(),{box,finish}=batch()
+  const [x,,z]=deliveryTruck.rearAxle
+  boxTruck(box)
+  finish(body)
+  body.position.set(-x,0,-z)
+  truck.position.set(x,0,z)
+  truck.add(body)
+  return truck
+}
 export function geometry(cap:Capacity,inputs:Inputs,phase:Phase,previous?:Capacity,focus?:FlowFocus|null){
   const exterior=outdoor(cap,phase,focus?.ids)
+  const truck=focus?undefined:stagedTruck()
+  if(truck) exterior.add(truck)
   const stairs=staircase()
   const ground=interior('ground',cap,focus?.ids),upper=interior('upper',cap,focus?.ids)
+  const access=focus?undefined:accessGeometry()
+  if(access) ground.group.add(access.group)
   const incoming=racks(ground.group,cap,previous,focus)
   const roofGroup=roof(inputs.solar,focus)
   const ceilings=walkCeilings()
-  const plinth=batch(),upperBase=new T.Group()
-  const [x,z,w,d]=property.upper
-  for(const [px,pz,pw,pd] of upperSlabs) plinth.box([px+pw/2,property.technicalHeight/2,pz+pd/2],[pw,property.technicalHeight,pd],'#d5d6ca')
-  for(let i=0;i<4;i++) plinth.box([x+w*(i+.5)/4,2.32,z+d+.04],[w*.17,1.12,.075],'#859b93')
-  plinth.finish(upperBase);upper.group.add(upperBase)
+  const upperBase=upperFoundation()
+  upper.group.add(upperBase)
   const walkWalls=new T.Group(),walkBatch=batch()
   walls(walkBatch.box,'ground',true);walkBatch.finish(walkWalls);ground.group.add(walkWalls);walkWalls.visible=false
   const upperWalkWalls=new T.Group(),upperWalkBatch=batch()
   walls(upperWalkBatch.box,'upper',true);upperWalkBatch.finish(upperWalkWalls);upper.group.add(upperWalkWalls);upperWalkWalls.visible=false
   const rackObstacles=cap.racks.map(rack=>({x:rack.position[0],z:rack.position[2],w:specs.rack.width,d:specs.rack.depth}))
-  return {exterior,stairs,ceilings,ground:ground.group,upper:upper.group,roof:roofGroup,incoming,cutWalls:ground.cutWalls,walkWalls,
+  return {exterior,stairs,ceilings,access,truck,ground:ground.group,upper:upper.group,roof:roofGroup,incoming,cutWalls:ground.cutWalls,walkWalls,
     upperBase,upperCutWalls:upper.cutWalls,upperWalkWalls,upperCollision:upper.collision,collision:[...ground.collision,...rackObstacles]}
 }
 export type Geometry=ReturnType<typeof geometry>
@@ -162,7 +206,7 @@ export function bounds(id:string):{at:Point;size:Point;floor?:Floor;radius:numbe
   const asset=equipment.find(item=>item.id===id)
   if(asset){
     const outside=['generator','transformer','fuel','condenser','security','camera'].includes(asset.kind)
-    const size:Record<string,[number,number]>={generator:[5,5],transformer:[4.6,4.7],fuel:fuelTankFootprint,condenser:[5.2,2.4],solar:[24,13],security:[3,3],camera:[.7,.7]}
+    const size:Record<string,[number,number]>={generator:[5,5],transformer:[4.6,4.7],fuel:fuelTankFootprint,condenser:[5.2,2.4],solar:[24,13],security:siteAccess.boothSize,camera:[.7,.7]}
     const [w,d]=size[asset.kind]??[1.72,1.52]
     return {at:[asset.position[0],outside?.09:asset.kind==='solar'?4.46:.24,asset.position[2]],size:[w,.026,d],floor:outside?undefined:asset.kind==='solar'?'roof':'ground',radius:Math.max(7,Math.max(w,d)*1.65)}
   }

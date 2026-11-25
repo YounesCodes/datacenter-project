@@ -26,12 +26,47 @@ export const parcelVerified=Boolean(property.confidence==='parcelle'&&property.p
 export const accessVestibule={
   rect:[17.32,2.14,2.68,2.12] as Rect,axis:3.2,innerDoor:1.38,outerDoor:1.7,
 }
-export const stairs={x:18.4,lowZ:11,run:.26,steps:20,width:1.72,opening:[17.4,5.94,2,5.28] as Rect}
-export const parking={firstLine:-18,bayWidth:2.52,bayCount:8,bayDepth:5.12,z:16.65,surfaceY:.035}
+export const eastGroundDoors={
+  network:[-8.6,1.2],reception:[accessVestibule.axis,accessVestibule.outerDoor],stairs:[11.2,1.2],
+} as const
+export const serviceEntry=[-.95,1.65] as const
+export const loadingDoor={opening:[5.5,3.15] as const,height:2.72}
+export const staffStairLobby:Rect=[17,5.5,3,7]
+export const utilityDoor={edge:'e',at:11.72,width:1.1} as const
+export const stairs={x:18.4,lowZ:11,run:.26,steps:20,width:1.72,opening:[17.4,5.94,2,5.28] as Rect,railWidth:.065}
+const stairPassageWall=15.7
+const restroomWest=13
+export const stairSideDoors={
+  shared:{edge:'e',at:6.65,width:1.10},restroom:{edge:'e',at:10.9,width:1.10},
+} as const
+const frontBoundary=21.25
+const frontageStart=12.65
+const visitorBay:Rect=[10.7,18,6.8,2.7]
+export const siteAccess={
+  surfaceY:.035,
+  forecourt:[-28.7,frontageStart,57.4,frontBoundary-frontageStart] as Rect,
+  westApron:[-28.7,6.6,8.15,frontageStart-6.6] as Rect,
+  eastDrive:[20.55,-12.5,8.15,frontageStart+12.5] as Rect,
+  entrance:[18.1,19.4,10.6,frontBoundary-19.4] as Rect,
+  exit:[-28.7,19.4,11.4,frontBoundary-19.4] as Rect,
+  booth:[28.02,0,18.65] as Point,
+  boothSize:[1.6,2.04] as [number,number],
+  camera:[27.9,0,6.9] as Point,
+  loading:[-5.8,frontageStart,16.5,4.15] as Rect,
+}
+export const deliveryTruck={
+  rearAxle:[3.5,0,15] as Point,
+  length:8.2,width:2.55,rearOverhang:1.95,wheelbase:4.65,
+}
+export const parking={
+  bays:[[-16.8,18,6.8,2.7],[-10,18,6.8,2.7],visitorBay] as Rect[],
+  yaw:Math.PI/2,
+}
 export const visitorArrival={
-  x:parking.firstLine+(parking.bayCount-2)*parking.bayWidth,
-  z:parking.z+parking.bayDepth/2-.16,
-  yaw:-Math.PI/2,
+  x:property.building[0]+property.building[2]+3.15,
+  z:accessVestibule.axis,
+  yaw:Math.PI/2,
+  pitch:-.05,
 }
 const [upperX,upperZ,upperW,upperD]=property.upper
 const [shaftX,shaftZ,shaftW,shaftD]=stairs.opening
@@ -63,26 +98,69 @@ export type Room = {
 export const rooms: Room[] = [
   {id:'hall-a',name:'Salle serveurs A',short:'Salle A',rect:[-20,-12.5,15,10],floor:'ground',color:'#d2ddd7',description:'Les serveurs de cette salle font tourner les machines virtuelles et conservent une partie des données. L’air froid arrive entre les rangées de baies et traverse les serveurs.',details:'24 emplacements de baie. Les baies installées sont raccordées à deux circuits électriques A/B et à deux chemins réseau.',layer:'compute',cost:'rack'},
   {id:'hall-b',name:'Salle serveurs B',short:'Salle B',rect:[-5,-12.5,15,10],floor:'ground',color:'#cdd9d7',description:'La deuxième salle sépare physiquement une partie du calcul et du stockage. Chaque salle dispose de sa propre distribution de refroidissement.',details:'Le plan de haute disponibilité organise la reprise des machines virtuelles dans la salle qui reste en service. Le cluster utilise le quorum et les copies de données réparties entre les deux salles.',layer:'storage',cost:'rack'},
-  {id:'power',name:'Local électrique',short:'Électricité',rect:[-20,.5,13,10],floor:'ground',color:'#e5d9be',description:'Les armoires distribuent l’électricité aux baies. En cas de coupure, les onduleurs utilisent leurs batteries pendant le démarrage des groupes électrogènes.',details:'Les voies A et B distribuent le courant séparément aux équipements à double alimentation.',layer:'power',cost:'ups'},
-  {id:'cooling',name:'Local de refroidissement',short:'Refroidissement',rect:[-7,.5,9,10],floor:'ground',color:'#c8dde0',description:'Depuis ce local, on surveille le refroidissement des salles. Les climatiseurs de précision en périphérie soufflent vers le plancher puis reprennent l’air chaud en hauteur.',details:'Climatisation à détente directe (DX). Des condenseurs extérieurs rejettent la chaleur. Une unité de réserve par salle prend le relais en cas de panne.',layer:'air',cost:'crac'},
-  {id:'delivery',name:'Livraison et maintenance',short:'Livraison',rect:[2,.5,7,10],floor:'ground',color:'#e4dbcb',description:'Les équipements arrivent par un accès distinct. Ils sont déballés, vérifiés et préparés avant d’entrer en salle informatique.',details:'Le couloir central relie l’atelier aux salles. Les rayonnages et l’établi laissent ce passage libre.'},
+  {id:'power',name:'Local électrique',short:'Électricité',rect:[-20,.5,13,12],floor:'ground',color:'#e5d9be',description:'Les armoires distribuent l’électricité aux baies. En cas de coupure, les onduleurs utilisent leurs batteries pendant le démarrage des groupes électrogènes.',details:'Les voies A et B distribuent le courant séparément aux équipements à double alimentation.',layer:'power',cost:'ups'},
+  {id:'cooling',name:'Local de refroidissement',short:'Refroidissement',rect:[-7,.5,9,12],floor:'ground',color:'#c8dde0',description:'Depuis ce local, on surveille le refroidissement des salles. Les climatiseurs de précision en périphérie soufflent vers le plancher puis reprennent l’air chaud en hauteur.',details:'Climatisation à détente directe (DX). Des condenseurs extérieurs rejettent la chaleur. Une unité de réserve par salle prend le relais en cas de panne.',layer:'air',cost:'crac'},
+  {id:'delivery',name:'Livraison et maintenance',short:'Livraison',rect:[2,.5,8,12],floor:'ground',color:'#e4dbcb',description:'La porte coulissante du quai ouvre directement sur l’atelier. Les équipements sont déballés, vérifiés et préparés avant d’entrer en salle informatique.',details:'Une zone de dépose latérale laisse libre l’allée entre le quai et le couloir central.'},
   {id:'network',name:'Local réseau et fibre',short:'Réseau',rect:[10,-6.5,10,4],floor:'ground',color:'#d7d3e4',description:'Les fibres des opérateurs arrivent dans cette salle. Les routeurs choisissent un chemin. Les pare-feu filtrent le trafic avant son arrivée aux serveurs.',details:'Deux parcours de fibre relient les entrées des opérateurs au cœur réseau des salles A et B.',layer:'network',cost:'network'},
   {id:'noc',name:'Supervision du réseau',short:'Supervision',rect:[10,-12.5,7.5,6],floor:'ground',color:'#cbd5dc',description:'Cette salle sert à surveiller les équipements et les alertes du site. Le NOC suit le réseau et le SOC suit les alertes de sécurité informatique.',details:'Consoles, écrans de supervision et suivi des alarmes techniques.'},
   {id:'reception',name:'Accueil et contrôle d’accès',short:'Accueil',rect:[10,.5,10,5],floor:'ground',color:'#e2d5bd',description:'Les visiteurs se présentent à l’accueil. Un sas à deux portes et des lecteurs de badge limitent l’accès aux zones techniques.',details:'Caméras, clôture et contrôle des véhicules complètent la protection du site.',cost:'security'},
-  {id:'utility',name:'Locaux de service',short:'Services',rect:[10,5.5,7,5],floor:'ground',color:'#d8ddd4',description:'Ces locaux regroupent les services du bâtiment et le matériel d’intervention.',details:'La détection de fuite alerte avant que l’eau n’atteigne les équipements électriques.'},
-  {id:'offices',name:'Bureaux de direction',short:'Bureaux',rect:[10,.5,5,4],floor:'upper',color:'#e8dabc',description:'Bureaux du premier étage de l’aile administrative.',details:'Le palier relie les bureaux à la salle de réunion.'},
+  {id:'utility',name:'Locaux de service',short:'Services',rect:[10,5.5,7,7],floor:'ground',color:'#d8ddd4',description:'Le palier du personnel donne accès au matériel d’intervention et aux équipements de service.',details:'La détection de fuite alerte avant que l’eau n’atteigne les équipements électriques.'},
+  {id:'offices',name:'Bureau de direction',short:'Direction',rect:[10,.5,5,4],floor:'upper',color:'#e8dabc',description:'Bureau du directeur du site : poste de travail face à la porte, deux sièges visiteurs, rangements et coin salon.',details:'Le palier relie le bureau à la salle de réunion.'},
   {id:'meeting',name:'Salle de réunion',short:'Réunion',rect:[15,.5,5,4],floor:'upper',color:'#ded7be',description:'L’espace sert aux réunions de projet et aux interventions coordonnées.',details:'Accès par l’escalier de l’aile administrative.'},
-  {id:'shared',name:'Espace de travail',short:'Espace de travail',rect:[10,5.8,7,3.8],floor:'upper',color:'#d3ddcf',description:'Postes de travail partagés dans l’aile administrative.',details:'Étage séparé des salles techniques.'},
-  {id:'break',name:'Salle de pause',short:'Salle de pause',rect:[10,9.6,4,2.9],floor:'upper',color:'#dfd6c1',description:'Espace de pause du premier étage.',details:'Les sanitaires sont voisins du palier.'},
-  {id:'restroom',name:'Sanitaires',short:'Sanitaires',rect:[14,9.6,3,2.9],floor:'upper',color:'#d3d9d3',description:'Sanitaires de l’étage administratif.',details:'Les réseaux d’eau sont tenus à l’écart des salles informatiques.'},
+  {id:'shared',name:'Espace de travail',short:'Espace de travail',rect:[10,6,stairPassageWall-10,3.6],floor:'upper',color:'#d3ddcf',description:'Quatre postes partagés en deux rangées le long des murs, de part et d’autre d’une allée centrale de 1,9 m qui mène à la salle de pause.',details:'Étage séparé des salles techniques.'},
+  {id:'break',name:'Salle de pause',short:'Salle de pause',rect:[10,9.6,restroomWest-10,2.9],floor:'upper',color:'#dfd6c1',description:'Espace de pause du premier étage.',details:'Les sanitaires sont voisins du palier.'},
+  {id:'restroom',name:'Sanitaires',short:'Sanitaires',rect:[restroomWest,9.6,stairPassageWall-restroomWest,2.9],floor:'upper',color:'#d3d9d3',description:'Sanitaires de l’étage administratif.',details:'Les réseaux d’eau sont tenus à l’écart des salles informatiques.'},
 ]
+
+export type AccessMethod='code'|'fingerprint'|'iris'
+type DoorSpec={id:string;room:Pick<Room,'name'|'id'|'short'>;x:number;z:number;width:number;outside:1|-1;yaw?:number;companion?:string;inner?:boolean}
+export type AuthenticatedDoor=DoorSpec&{method:AccessMethod}
+export type SecureDoor=AuthenticatedDoor|(DoorSpec&{method:'delivery'})
+type SecureEntrance={edge:'n'|'s';at:number;width:number;method:AccessMethod;vestibule?:number}
+export const secureEntrances:Record<string,SecureEntrance>={
+  'hall-a':{edge:'s',at:-18.35,width:1.45,method:'iris',vestibule:2.05},
+  'hall-b':{edge:'s',at:7.6,width:1.55,method:'fingerprint',vestibule:2.05},
+  power:{edge:'n',at:-9.2,width:1.35,method:'code'},
+  cooling:{edge:'n',at:-4.5,width:1.35,method:'code'},
+  network:{edge:'s',at:18.15,width:1.25,method:'fingerprint'},
+}
+const roomDoors=Object.entries(secureEntrances).flatMap(([id,entry]):AuthenticatedDoor[]=>{
+  const room=rooms.find(room=>room.id===id)!
+  const [,z,,depth]=room.rect
+  const outside=entry.edge==='s'?1:-1,wallZ=outside===1?z+depth:z
+  const outer:AuthenticatedDoor={id,room,x:entry.at,z:wallZ,width:entry.width,outside,method:entry.method}
+  if(!entry.vestibule) return [outer]
+  const inner={...outer,id:id+'-inner',z:wallZ-outside*entry.vestibule,inner:true,companion:id}
+  return [{...outer,companion:inner.id},inner]
+})
+const [westWall,northWall,buildingWidth,buildingDepth]=property.building
+export const staffStairDoor:AuthenticatedDoor={
+  id:'staff-stairs',room:{id:'staff-stairs',name:'Escalier du personnel',short:'Personnel'},
+  x:westWall+buildingWidth,z:eastGroundDoors.stairs[0],width:eastGroundDoors.stairs[1],outside:1,yaw:Math.PI/2,method:'fingerprint',
+}
+export const facadeDoors:SecureDoor[]=[staffStairDoor,{
+  id:'service-entry',room:{id:'service-entry',name:'Entrée de service',short:'Service'},
+  x:westWall,z:serviceEntry[0],width:serviceEntry[1],outside:1,yaw:-Math.PI/2,method:'code',
+},{
+  id:'loading-door',room:{id:'delivery',name:'Quai de livraison',short:'Livraison'},
+  x:loadingDoor.opening[0],z:northWall+buildingDepth,width:loadingDoor.opening[1],outside:1,method:'delivery',
+}]
+export const secureDoors:SecureDoor[]=[...roomDoors,...facadeDoors]
+export const secureSas=secureDoors.filter(door=>door.inner).map(inner=>{
+  const outer=secureDoors.find(door=>door.id===inner.companion)!
+  const width=outer.width+.48
+  return {outer,inner,rect:[outer.x-width/2,Math.min(outer.z,inner.z),width,Math.abs(outer.z-inner.z)] as Rect}
+})
+
 export type WalkZone={id:string;name:string;level:string}
 const outsideZones:{id:string;name:string;rect:Rect}[]=[
   {id:'reserve',name:'Réserve d’extension',rect:property.reserve},
-  {id:'gate',name:'Entrée du site',rect:[21.5,11.9,6.7,9.35]},
-  {id:'parking',name:'Stationnement',rect:[-18.1,14.09,20.2,5.16]},
-  {id:'loading',name:'Aire de livraison',rect:[2.1,11.9,7,7.9]},
-  {id:'service-yard',name:'Cour des équipements',rect:[-28,-12.85,7.6,25.65]},
+  {id:'entrance',name:'Entrée du site',rect:siteAccess.entrance},
+  {id:'exit',name:'Sortie du site',rect:siteAccess.exit},
+  {id:'visitor-entry',name:'Entrée des visiteurs',rect:[westWall+buildingWidth,accessVestibule.axis-1.35,3.6,2.7]},
+  ...parking.bays.map(rect=>({id:'parking',name:'Stationnement',rect})),
+  {id:'loading',name:'Aire de livraison',rect:siteAccess.loading},
+  {id:'service-yard',name:'Cour des équipements',rect:[-28,-12.85,7.6,19.45]},
   {id:'cooling-yard',name:'Cour des condenseurs',rect:[-21,-19.9,26.1,6.6]},
 ]
 export function walkZoneAt(x:number,z:number,elevation:number):WalkZone{
@@ -91,6 +169,11 @@ export function walkZoneAt(x:number,z:number,elevation:number):WalkZone{
   const upper=elevation>=property.technicalHeight-.22
   const level=upper?'Premier étage':'Rez-de-chaussée'
   if(!upper&&contains(accessVestibule.rect,x,z,.08)) return {id:'vestibule',name:'Sas d’accès',level}
+  if(!upper&&contains(staffStairLobby,x,z,.08)) return {id:'staff-lobby',name:'Palier du personnel',level}
+  if(!upper){
+    const sas=secureSas.find(({rect})=>contains(rect,x,z,.08))
+    if(sas) return {id:sas.inner.id,name:'Sas · '+sas.inner.room.short,level}
+  }
   const room=rooms.find(item=>item.floor===(upper?'upper':'ground')&&contains(item.rect,x,z,.1))
   if(room) return {id:room.id,name:room.name,level}
   if(upper) return {id:'upper-corridor',name:'Palier et circulation',level}
@@ -127,7 +210,7 @@ export const phases = {
 export const hallInfrastructure=(['hall-a','hall-b'] as const).map((id,index)=>{
   const [x,z,w]=rooms.find(room=>room.id===id)!.rect
   const suffix=index===0?'A':'B'
-  return {id,suffix,x,z,crac:[x+w-.71,0,z+1.02] as Point,pdu:[x+.65,0,z+6.6] as Point,
+  return {id,suffix,x,z,crac:[x+w-.71,0,z+1.02] as Point,pdu:[x+.65,0,z+(suffix==='A'?1.15:6.6)] as Point,
     condenser:[x+1.25,0,-17.75] as Point,temperature:[x+2.3,0,z+2.7] as Point}
 })
 // The first three units exist in both halls from phase 1.
@@ -154,10 +237,10 @@ export const equipment = [
   {id:'core',name:'Commutation du cœur réseau',position:[12.25,0,-5.5],kind:'router',layer:'network',cost:'network',description:'Le cœur réseau dessert les baies des deux salles et transporte les échanges entre serveurs.'},
   {id:'solar',name:'Panneaux photovoltaïques',position:[-4,4.65,-.5],kind:'solar',layer:'solar',cost:'solar',description:'La production solaire alimente une partie des besoins en journée. Les batteries des onduleurs et les groupes ont une fonction de secours distincte.'},
   {id:'inverter',name:'Onduleur photovoltaïque',position:[-7.35,0,2],kind:'panel',layer:'solar',cost:'solar',description:'Convertit la production des panneaux en courant alternatif injecté dans le tableau du site.'},
-  {id:'security',name:'Contrôle des véhicules',position:[25,0,16],kind:'security',cost:'security',description:'La barrière filtrée dirige les visiteurs vers l’accueil et les livraisons vers leur accès réservé.'},
-  {id:'fire',name:'Détection et extinction incendie',position:[-18.92,0,-3.62],kind:'fire',cost:'fire',description:'La détection par aspiration surveille l’air des salles. Le système d’extinction diffuse un agent propre dans la zone protégée.'},
+  {id:'security',name:'Contrôle des véhicules',position:siteAccess.booth,kind:'security',cost:'security',description:'Les véhicules entrent par le portail est, longent le stationnement et l’aire de livraison, puis ressortent par le portail ouest.'},
+  {id:'fire',name:'Détection et extinction incendie',position:[-18.92,0,-8.9],kind:'fire',cost:'fire',description:'La détection par aspiration surveille l’air des salles. Le système d’extinction diffuse un agent propre dans la zone protégée.'},
   {id:'leak',name:'Détection de fuite',position:[-5.8,0,5],kind:'sensor',layer:'air',cost:'security',description:'Une sonde au sol signale une fuite près des équipements de froid.'},
-  {id:'camera',name:'Caméra de périmètre',position:[27.3,0,11.5],kind:'camera',cost:'security',description:'Les caméras surveillent les entrées du site et les accès au bâtiment.'},
+  {id:'camera',name:'Caméra de périmètre',position:siteAccess.camera,kind:'camera',cost:'security',description:'Les caméras surveillent les entrées du site et les accès au bâtiment.'},
 ] satisfies {id:string;name:string;position:Point;kind:string;layer?:Layer;cost:string;description:string}[]
 export type Equipment = (typeof equipment)[number]
 

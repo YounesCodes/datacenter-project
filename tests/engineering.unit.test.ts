@@ -30,7 +30,7 @@ function overlap([x,z,w,d]:Rect,[a,b,c,e]:Rect) {
 describe('géométrie et population',()=>{
   it('respecte les surfaces et sépare les salles de chaque niveau',()=>{
     expect(landArea).toBe(2465);expect(area(property.building)).toBe(1000);expect(area(property.upper)).toBe(120)
-    expect(groundSupport).toBe(240)
+    expect(groundSupport).toBe(156)
     for(const room of rooms){
       expect(overlap(room.rect,room.floor==='ground'?property.building:property.upper)).toBeCloseTo(area(room.rect))
       for(const other of rooms.filter(item=>item.floor===room.floor&&item.id!==room.id)) expect(overlap(room.rect,other.rect)).toBeCloseTo(0)

@@ -2,14 +2,11 @@ import * as T from 'three'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import parkingAsset from './assets/parking-cars.glb?url'
-import { parking } from './model'
+import { center,parking,siteAccess } from './model'
 
 const vehicles=[
   {bay:0,model:'hatchback',color:'#dddcd3'},
-  {bay:2,model:'family-sedan',color:'#9c6149'},
-  {bay:4,model:'hatchback',color:'#637864'},
-  {bay:5,model:'family-sedan',color:'#e0dfd5'},
-  {bay:6,model:'hatchback',color:'#466571'},
+  {bay:1,model:'family-sedan',color:'#9c6149'},
 ]
 let asset:ReturnType<GLTFLoader['loadAsync']>|undefined
 
@@ -32,7 +29,8 @@ export async function parkedVehicles(){
       const mesh=new T.InstancedMesh(part.geometry,part.material,slots.length)
       mesh.name=part.name
       for(const [index,{bay,color:paint}] of slots.entries()){
-        transform.makeTranslation(parking.firstLine+(bay+.5)*parking.bayWidth,parking.surfaceY,parking.z)
+        const [x,,z]=center(parking.bays[bay])
+        transform.makeRotationY(parking.yaw).setPosition(x,siteAccess.surfaceY,z)
         transform.multiply(part.matrixWorld)
         mesh.setMatrixAt(index,transform)
         if(!part.geometry.hasAttribute('color')) mesh.setColorAt(index,color.set(paint))

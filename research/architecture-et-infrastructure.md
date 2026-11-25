@@ -6,18 +6,20 @@
 
 Le point **32.25065, −7.93090** correspond à l’emplacement probable identifié près de la RP2106. La parcelle rectangulaire de **58 × 42,5 m** conserve les 2 465 m² annoncés. Son tracé, son orientation et ses reculs sont conceptuels. Les 1 465 m² extérieurs incluent les accès, le stationnement, la circulation, les équipements et la réserve d’extension extérieure d’environ 128 m². La photographie montre un fossé dans le voisinage. Le raccordement routier, la topographie, le risque de ruissellement et l’aptitude du sol restent à étudier. [Recherche de localisation](localisation-parcelle.md)
 
+La circulation proposée dans la maquette va de l’entrée est à la sortie ouest, sur la même façade. Elle dessert trois places parallèles et une aire de livraison de 16,5 × 4,15 m devant l’atelier. L’aire comprend un espace de déchargement derrière le camion porteur de 8,2 m représenté. Le raccordement des deux portails à la voirie reste à confirmer sur le terrain.
+
 | Zone du rez-de-chaussée | Dimensions du plan | Surface |
 | --- | --- | ---: |
 | Salle informatique A | 15 × 10 m | 150 m² |
 | Salle informatique B | 15 × 10 m | 150 m² |
-| Local électrique | 13 × 10 m | 130 m² |
-| Local refroidissement | 9 × 10 m | 90 m² |
-| Livraison, préparation et entretien | 7 × 10 m | 70 m² |
+| Local électrique | 13 × 12 m | 156 m² |
+| Local refroidissement | 9 × 12 m | 108 m² |
+| Livraison, préparation et entretien | 8 × 12 m | 96 m² |
 | Réseau et raccordement fibre | 10 × 4 m | 40 m² |
 | Supervision réseau et sécurité | 7,5 × 6 m | 45 m² |
 | Accueil et contrôle d’accès | 10 × 5 m | 50 m² |
-| Locaux de service | 7 × 5 m | 35 m² |
-| Couloirs, murs, escalier et services | Solde d’emprise | 240 m² |
+| Locaux de service | 7 × 7 m | 49 m² |
+| Couloirs, murs, escalier et services | Solde d’emprise | 156 m² |
 | **Total au sol** | **40 × 25 m** | **1 000 m²** |
 
 L’étage de l’aile administrative ajoute 120 m². La hauteur de référence est de 4,2 m pour le rez-de-chaussée technique et 3,2 m pour l’étage. Les murs du plan de travail ont 18 cm d’épaisseur. Les surfaces du tableau proviennent des rectangles du modèle, avant déduction de l’épaisseur des cloisons. Les accès de livraison et visiteurs, le gabarit du matériel, les dégagements, le plancher, l’accessibilité et l’évacuation demandent une vérification sur plan d’exécution.

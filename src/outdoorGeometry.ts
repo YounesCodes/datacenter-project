@@ -1,5 +1,5 @@
 import * as T from 'three'
-import { equipment,hallInfrastructure,parking,property,technicalPorts,type Phase,type Point } from './model'
+import { deliveryTruck,equipment,hallInfrastructure,property,siteAccess,technicalPorts,type Phase,type Point } from './model'
 import type { Capacity } from './engineering'
 import { batch,cableGland,colors as C,flooring,rod,segment,type Place } from './geometryTools'
 import { fuelTank,oliveTree } from './outdoorDetails'
@@ -13,9 +13,7 @@ function terrain(group:T.Group){
 }
 const landscapedBeds:{rect:[number,number,number,number];trees:Point[]}[]=[
   {rect:[-28,-20.2,5.9,5.9],trees:[[-26.4,-18.35,1.18],[-24.16,-16.4,1.05]]},
-  {rect:[27.1,-12.35,1.81,23.35],trees:[[28,-9.4,.74],[28,-3.8,.73],[28,2.8,.75],[28,8.1,.71]]},
-  {rect:[-28,19.37,24,1.75],trees:[[-24.4,20.25,.74],[-18.9,20.24,.73],[-12.8,20.25,.71],[-6.85,20.24,.75]]},
-  {rect:[9.55,19.68,6.6,1.43],trees:[[11.2,20.4,.60],[14.7,20.4,.61]]},
+  {rect:[27.1,-12.35,1.81,18.9],trees:[[28,-9.4,.74],[28,-3.8,.73],[28,2.8,.75]]},
 ]
 function landscaping(box:Place){
   for(const {rect:[x,z,w,d],trees} of landscapedBeds){
@@ -27,17 +25,79 @@ function landscaping(box:Place){
     }
   }
 }
+function accessGeometry(box:Place){
+  const {forecourt,westApron,eastDrive,entrance,exit,booth,boothSize,loading,surfaceY}=siteAccess
+  for(const rect of [forecourt,westApron,eastDrive]) flooring(box,rect,surfaceY,C.asphalt)
+  for(const [x,z,w,d] of [entrance,exit]) flooring(box,[x,z+d,w,2],surfaceY,C.asphalt,undefined,.78)
+  flooring(box,[3.925,12.5,3.15,.15],surfaceY,'#a8ada2')
+  flooring(box,[11,12,8.75,.65],.062,'#deded0')
+
+  const paintY=surfaceY+.014
+  const [loadingX,loadingZ,loadingW,loadingD]=loading
+  const loadingPaint='#e4c28a'
+  for(const end of [loadingX+.08,loadingX+loadingW-.08])
+    box([end,paintY,loadingZ+loadingD/2],[.075,.014,loadingD-.12],loadingPaint)
+  for(const edge of [loadingZ+.06,loadingZ+loadingD-.06])
+    box([loadingX+loadingW/2,paintY,edge],[loadingW-.16,.014,.075],loadingPaint)
+  const truckRear=deliveryTruck.rearAxle[0]+deliveryTruck.rearOverhang
+  for(let i=0;i<5;i++){
+    const x=truckRear+.5+i*.46
+    segment(box,[x,paintY,loadingZ+.2],[x+1,paintY,loadingZ+loadingD-.2],.075,loadingPaint,.013)
+  }
+  const [bx,,bz]=booth
+  const [bw,bd]=boothSize
+  const wallWidth=bw-.24,wallDepth=bd-.24
+  box([bx,1.17,bz],[wallWidth,2.34,wallDepth],C.trim,'security')
+  box([bx,2.4,bz],[bw,.12,bd],C.fence,'security')
+  box([bx-wallWidth/2-.02,1.64,bz],[.04,.72,1.3],C.screen,'security')
+  box([bx,1.64,bz+wallDepth/2+.02],[.92,.72,.04],C.screen,'security')
+
+  for(const [x,z,w,d] of [entrance,exit]){
+    const barrierZ=z+d-.3
+    // Les deux lisses relevées libèrent toute la largeur du passage.
+    const stripeLength=(w/2-.18)/9,angle=88*Math.PI/180
+    for(const side of [-1,1]){
+      const pivot=x+w/2+side*(w/2-.18)
+      const axis:Point=[-side*Math.cos(angle),Math.sin(angle),0]
+      box([pivot,.55,barrierZ],[.36,1.1,.4],C.white,false)
+      for(let i=0;i<9;i++){
+        const offset=(i+.5)*stripeLength
+        box([pivot+axis[0]*offset,1.05+axis[1]*offset,barrierZ],[.13,stripeLength,.13],
+          i%2?'#b8644d':C.white,false,0,'box','solid',0,axis)
+      }
+    }
+  }
+}
+
+function perimeterFence(box:Place){
+  function span([ax,az]:[number,number],[bx,bz]:[number,number]){
+    const n=Math.ceil(Math.hypot(bx-ax,bz-az)/2.8)
+    for(let i=0;i<n;i++){
+      const [x,z]=[T.MathUtils.lerp(ax,bx,i/n),T.MathUtils.lerp(az,bz,i/n)]
+      const [nx,nz]=[T.MathUtils.lerp(ax,bx,(i+1)/n),T.MathUtils.lerp(az,bz,(i+1)/n)]
+      box([x,.79,z],[.12,1.58,.12],C.fence)
+      for(const h of [.2,.77,1.37]) segment(box,[x,h,z],[nx,h,nz],.047,C.fence,.056)
+    }
+  }
+  const [entryX,entryZ,entryW,entryD]=siteAccess.entrance,frontZ=entryZ+entryD
+  const [exitX,,exitW]=siteAccess.exit
+  for(const [i,a] of property.boundary.entries()){
+    const b=property.boundary[(i+1)%property.boundary.length]
+    if(a[1]===frontZ&&b[1]===frontZ){
+      span(a,[entryX+entryW,frontZ])
+      span([entryX,frontZ],[exitX+exitW,frontZ])
+      span([exitX,frontZ],b)
+    }else span(a,b)
+  }
+}
+
 export function outdoor(cap:Capacity,phase:Phase,visibleIds?:ReadonlySet<string>){
   const group=new T.Group()
   if(!visibleIds||visibleIds.has('reserve')) terrain(group)
   const {box,finish}=batch(visibleIds)
-  flooring(box,[-28,12.9,54,6.42],parking.surfaceY,C.asphalt)
-  flooring(box,[20.5,-12.5,6.5,32],.04,C.asphalt)
-  flooring(box,[-28,-12.85,7.6,25.65],.045,'#b7b6a8')
+  flooring(box,[-28,-12.85,7.6,19.45],.045,'#b7b6a8')
   flooring(box,[-21,-19.9,26.1,6.6],.05,'#bfc6b8')
-  flooring(box,[2.1,11.9,7,7.9],.06,'#a8ada2')
-  flooring(box,[11,12,8,2.1],.062,'#deded0')
-  flooring(box,[17,13.7,2.1,6.5],.065,C.trim)
+  accessGeometry(box)
   flooring(box,[19.92,2.15,1.86,2.12],.096,C.concrete)
   flooring(box,[19.92,10.48,1.56,1.44],.074,C.concrete)
   flooring(box,property.reserve,.055,'#b6c09d','reserve')
@@ -55,31 +115,10 @@ export function outdoor(cap:Capacity,phase:Phase,visibleIds?:ReadonlySet<string>
     for(const x of [7.7,20.7]) for(const z of [-19.1,-14.5]) box([x,1.38,z],[.11,2.65,.11],'#728c6e','reserve')
     for(const z of [-19.1,-14.5]) box([14.2,2.72,z],[13,.11,.11],'#728c6e','reserve')
   }
-  for(const [a,b] of property.boundary.map((p,i)=>[p,property.boundary[(i+1)%property.boundary.length]])){
-    const n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/2.8)
-    for(let i=0;i<n;i++){
-      const [x,z]=[T.MathUtils.lerp(a[0],b[0],i/n),T.MathUtils.lerp(a[1],b[1],i/n)]
-      const [nx,nz]=[T.MathUtils.lerp(a[0],b[0],(i+1)/n),T.MathUtils.lerp(a[1],b[1],(i+1)/n)]
-      if(z>20.5 && Math.min(x,nx)>19 && Math.min(x,nx)<27) continue
-      box([x,.79,z],[.12,1.58,.12],C.fence)
-      for(const h of [.2,.77,1.37]) segment(box,[x,h,z],[nx,h,nz],.047,C.fence,.056)
-    }
-  }
-  for(let i=0;i<=parking.bayCount;i++){
-    const x=parking.firstLine+i*parking.bayWidth
-    box([x,.065,parking.z],[.075,.024,parking.bayDepth],C.white)
-  }
-  const rowWidth=parking.bayCount*parking.bayWidth
-  box([parking.firstLine+rowWidth/2,.065,14.11],[rowWidth,.025,.082],C.white)
-  for(let i=0;i<10;i++) box([18.05,.081,14+i*.56],[1.83,.027,.2],C.white)
-  if(!visibleIds) landscaping(box)
-  box([25.9,1.32,14.7],[2.36,2.64,2.5],C.trim,'security')
-  box([25.9,2.69,14.7],[2.67,.14,2.78],C.fence,'security')
-  box([24.69,1.58,14.7],[.08,.9,1.57],C.screen,'security')
-  box([23.1,.56,19.8],[.37,1.12,.4],C.white,'security')
-  for(let i=0;i<9;i++) box([23.1+i*.47,1.05,19.8],[.49,.12,.12],i%2?'#b8644d':C.white,'security')
-  box([27.3,1.72,11.5],[.11,3.45,.11],C.fence,'camera')
-  box([27.17,3.33,11.33],[.26,.19,.48],C.white,'camera',.64)
+  if(!visibleIds){perimeterFence(box);landscaping(box)}
+  const [cx,,cz]=siteAccess.camera
+  box([cx,1.72,cz],[.11,3.45,.11],C.fence,'camera')
+  box([cx-.13,3.33,cz-.17],[.26,.19,.48],C.white,'camera',.64)
   const point=(id:string)=>equipment.find(item=>item.id===id)!.position
   const [tx,,tz]=point('transformer')
   const [gridX,gridY,gridZ]=technicalPorts.grid

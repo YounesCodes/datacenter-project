@@ -140,7 +140,7 @@ export function Stage(props:StageProps){
               <span>{walkZone.level}</span><strong>{walkZone.name}</strong>
             </div>}
           </div>
-          <p className="walk-keys">ZQSD ou flèches pour marcher. <span>Souris pour regarder · Échap pour sortir.</span></p>
+          <p className="walk-keys">ZQSD ou flèches pour marcher. <span>Souris pour regarder · E pour ouvrir · Échap pour sortir.</span></p>
         </div>}
         {ground&&!walk&&property.parcelAnchor&&<div className="geo-pin"><MapPin size={13}/><span>{property.parcelAnchor[0].toFixed(5)}°, {property.parcelAnchor[1].toFixed(5)}°</span></div>}
       </div>

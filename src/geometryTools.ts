@@ -3,9 +3,11 @@ import { center,type Point,type Rect } from './model'
 
 type Shape='box'|'round'|'pipe'|'branch'|'tree'|'leaf'|'sphere'
 type Surface='solid'|'glass'|'ghost'|'light'|'paint'
-type Part={at:Point;size:Point;color:T.ColorRepresentation;rotation:number;id?:string;tilt:number;axis?:Point}
-export type Place=(at:Point,size:Point,color:T.ColorRepresentation,id?:string,rotation?:number,shape?:Shape,surface?:Surface,tilt?:number,axis?:Point)=>void
-export type Picks=T.InstancedMesh & {userData:{ids:(string|undefined)[]}}
+// False stops selection at the part. An omitted ID lets the ray reach other parts.
+type PickId=string|false
+type Part={at:Point;size:Point;color:T.ColorRepresentation;rotation:number;id?:PickId;tilt:number;axis?:Point}
+export type Place=(at:Point,size:Point,color:T.ColorRepresentation,id?:PickId,rotation?:number,shape?:Shape,surface?:Surface,tilt?:number,axis?:Point)=>void
+export type Picks=T.InstancedMesh & {userData:{ids:(PickId|undefined)[]}}
 export const slab=.18
 export const colors={trim:'#f7f2e6',stone:'#d9ccb0',concrete:'#d4d6ca',paving:'#a0a8a0',asphalt:'#737d77',fence:'#495c50',rack:'#213733',metal:'#516860',door:'#608479',solar:'#234253',screen:'#324f54',white:'#f1f2e8'}
 const shapes:Record<Shape,T.BufferGeometry>={

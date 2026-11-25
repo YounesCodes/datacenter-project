@@ -1,5 +1,36 @@
 import { colors as C,rod,type Place } from './geometryTools'
-import type { Point } from './model'
+import { deliveryTruck,siteAccess,type Point } from './model'
+
+export function boxTruck(box:Place){
+  const {rearAxle:[axle,,z],length,width,rearOverhang,wheelbase}=deliveryTruck
+  const front=axle+rearOverhang-length,rear=axle+rearOverhang
+  const cabEnd=front+2.21,cargoStart=cabEnd+.17
+  const surface=siteAccess.surfaceY
+  const paint='#677d76',cargo='#dfddcf',frame='#3b4a44'
+  const part=(at:Point,size:Point,color:string)=>box([at[0],surface+at[1],at[2]],size,color)
+  part([(front+rear)/2,.81,z],[length-.26,.26,width-.28],frame)
+  part([(front+cabEnd)/2,1.66,z],[cabEnd-front,2.12,width-.12],paint)
+  part([(front+cabEnd)/2,2.75,z],[cabEnd-front+.04,.08,width-.09],'#81948c')
+  part([front-.008,2.25,z],[.025,.61,width-.35],C.screen)
+  part([front+.035,.71,z],[.07,.24,width-.06],frame)
+  part([front-.006,1.04,z],[.022,.34,1.11],frame)
+  part([(cargoStart+rear)/2,2.24,z],[rear-cargoStart,2.58,width],cargo)
+  part([(cargoStart+rear)/2,3.54,z],[rear-cargoStart,.06,width],'#d0d3c9')
+  for(const side of [-1,1]){
+    part([front+.65,2.25,z+side*(width-.1)/2],[1.03,.6,.031],C.screen)
+    part([front-.011,1.04,z+side*.96],[.035,.19,.3],C.white)
+    part([front+.27,1.99,z+side*(width/2+.073)],[.15,.22,.13],frame)
+    part([(cargoStart+rear)/2,.998,z+side*width/2],[rear-cargoStart,.085,.035],'#9da99e')
+    part([rear+.009,2.24,z+side*.621],[.03,2.4,1.18],'#cbd0c3')
+    part([rear+.031,2.21,z+side*.22],[.042,2.23,.038],'#87958c')
+    part([rear+.04,.78,z+side*.99],[.08,.15,.26],'#a65c4b')
+    for(const x of [axle-wheelbase,axle]){
+      const wheelZ=z+side*(width/2-.18)
+      box([x,surface+.45,wheelZ],[.9,.32,.9],'#333c37',undefined,0,'round','solid',0,[0,0,1])
+      box([x,surface+.45,wheelZ+side*.165],[.48,.025,.48],'#8d9991',undefined,0,'round','solid',0,[0,0,1])
+    }
+  }
+}
 
 export function oliveTree(box:Place,x:number,z:number,size:number){
   let seed=Math.round((x+30)*733+(z+23)*1597)
