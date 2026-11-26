@@ -17,7 +17,7 @@ const distance=(a:ModelSnapshot,b:ModelSnapshot)=>Math.max(...[...a.position,...
 
 async function open(page:Page){
   await page.goto('/')
-  await expect(page.getByRole('heading',{name:'Projet de centre de données'})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'Centre de données de Benguerir'})).toBeVisible()
   await expect(draw(page).locator('canvas[role=img]')).toBeVisible()
   await expect.poll(async()=>Number(await draw(page).getAttribute('data-draw-calls'))).toBeGreaterThan(0)
 }
@@ -388,11 +388,10 @@ test('les cartes et les commandes restent séparées pendant une simulation',asy
   await expect(story(page).getByRole('heading',{name:'Réseau disponible'})).toBeVisible()
   const note=story(page)
   const camera=page.getByLabel('Commandes de la caméra')
-  const title=page.getByRole('heading',{name:'Projet de centre de données'})
-  await expectSeparate(page,title,nav(page),note,tools(page),timeline(page),camera)
+  await expectSeparate(page,nav(page),note,tools(page),timeline(page),camera)
   for(const viewport of [{width:1440,height:900},{width:1280,height:720},{width:1920,height:1080},{width:960,height:540}]){
     await page.setViewportSize(viewport)
-    await expectSeparate(page,title,nav(page),note,tools(page),timeline(page),camera)
+    await expectSeparate(page,nav(page),note,tools(page),timeline(page),camera)
     await tools(page).getByRole('button',{name:'Simulations',exact:true}).click()
     const menu=tools(page).getByLabel('Scénarios de simulation')
     await expectSeparate(page,note,menu,timeline(page),camera)
@@ -403,7 +402,7 @@ test('les cartes et les commandes restent séparées pendant une simulation',asy
     await settings(page).click()
   }
   await expectSeparate(page,nav(page),tools(page),note,timeline(page),camera)
-  await nav(page).getByRole('button',{name:'Carte de Benguerir'}).click()
+  await nav(page).getByRole('button',{name:'Localisation'}).click()
   await expectSeparate(page,nav(page),page.locator('.geography:visible').last())
 })
 
@@ -486,7 +485,7 @@ test('la carte reste locale et la caméra de la maquette est conservée',async({
   await page.getByRole('button',{name:'Agrandir la maquette'}).click()
   await expect.poll(async()=>(await readView(page)).zoom).toBeGreaterThan(1.2)
   const before=await readView(page)
-  await nav(page).getByRole('button',{name:'Carte de Benguerir'}).click()
+  await nav(page).getByRole('button',{name:'Localisation'}).click()
   const map=page.getByRole('region',{name:'Carte interactive de Benguerir'})
   await expect(map.locator('.leaflet-tooltip').getByText('Site du projet')).toBeVisible()
   await expect(map.locator('.leaflet-tooltip').getByText('Benguerir')).toBeVisible()
@@ -494,19 +493,20 @@ test('la carte reste locale et la caméra de la maquette est conservée',async({
   await expect(zoomOut).toHaveClass(/leaflet-disabled/)
   await map.getByRole('button',{name:'Agrandir',exact:true}).click()
   await expect(zoomOut).not.toHaveClass(/leaflet-disabled/)
-  await expect(page.getByText('32,25065 / -7,93090')).toBeVisible()
+  await expect(nav(page).getByRole('button',{name:'Retour à la maquette'})).toHaveAccessibleDescription('32,25065° · -7,93090°')
+  await expect(page.getByText('32,25065° · -7,93090°',{exact:true})).toHaveCount(1)
   await expect(page.getByText('Fond de carte indisponible.',{exact:false})).toBeVisible()
   await expect(draw(page).locator('canvas[role=img]')).toBeHidden()
-  await nav(page).getByRole('button',{name:'Fermer la carte'}).click()
+  await nav(page).getByRole('button',{name:'Retour à la maquette'}).click()
   await expect(draw(page).locator('canvas[role=img]')).toBeVisible()
   await expect.poll(async()=>distance(await readView(page),before)).toBeLessThan(.001)
-  await nav(page).getByRole('button',{name:'Carte de Benguerir'}).click()
+  await nav(page).getByRole('button',{name:'Localisation'}).click()
   await expect(zoomOut).not.toHaveClass(/leaflet-disabled/)
 })
 
 test('la navigation affiche la carte et les commandes de caméra suivent l’ordre de la barre',async({page})=>{
   await open(page)
-  await expect(nav(page).getByRole('button')).toHaveText(['Carte de Benguerir'])
+  await expect(nav(page).getByRole('button',{name:'Localisation'})).toHaveAccessibleDescription('32,25065° · -7,93090°')
   const camera=page.getByLabel('Commandes de la caméra')
   const zoomIn=camera.getByRole('button',{name:'Agrandir la maquette'})
   await zoomIn.focus()

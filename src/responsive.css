@@ -41,7 +41,6 @@
   .stage[data-scale=site] .stage-head,.stage[data-scale=site] .stage-bottom{left:8px;right:8px}
   .stage-floors{left:8px}
   .stage-toolbar{right:8px}
-  .geo-pin{max-width:calc(100% - 43px)}
   .scene-marker{font-size:8px;padding:4px 5px;gap:3px}
   .layer-strip{min-height:41px;padding:5px 6px}
   .layer-title{display:none}

@@ -1,5 +1,5 @@
 import { useEffect,useMemo,useRef,useState,type CSSProperties } from 'react'
-import { ArrowRight, CircleHelp, Compass, Map, MapPin, X } from 'lucide-react'
+import { ArrowRight, CircleHelp, Compass, X } from 'lucide-react'
 import { capacity,defaults,energy,solarProfile } from './engineering'
 import { BoardTools,Stage,type BoardMenu,type Tool } from './Explorer'
 import Inspector,{ nameFor,RouteSample,SimulationPanel } from './Inspector'
@@ -148,16 +148,8 @@ export default function App(){
     if(!layer||simulationStep||!legendFocus) return null
     return (activeRoutes??normalRoutes[layer]).filter(route=>routeStyle(layer,route).label===legendFocus)
   },[layer,simulationStep,legendFocus,activeRoutes])
-  const header=<>
-    <header className="board-heading">
-      <div className="board-title"><div className="location"><MapPin size={13}/> BENGUERIR · MAROC</div><h1>Projet de centre de données</h1></div>
-      <nav className="board-actions" aria-label="Navigation principale">
-        <button className="soft-button" aria-pressed={scale==='city'} onClick={()=>goScale(scale==='city'?'site':'city')} title={scale==='city'?'Fermer la carte':'Carte de Benguerir'}><Map size={16}/><span>{scale==='city'?'Fermer la carte':'Carte de Benguerir'}</span></button>
-      </nav>
-    </header>
-    {scale==='site'&&!walk&&<BoardTools tool={tool} floor={floor} phase={phase} layer={layer} simulation={simulationStep?.id??null} menu={menu} onMenu={setMenu} onTool={setTool} onFloor={chooseFloor}
-      onPhase={next=>{setSimulationStep(null);choosePhase(next)}} onLayer={chooseLayer} onSimulation={startSimulation}/>}
-  </>
+  const toolbar=scale==='site'&&!walk&&<BoardTools tool={tool} floor={floor} phase={phase} layer={layer} simulation={simulationStep?.id??null} menu={menu} onMenu={setMenu} onTool={setTool} onFloor={chooseFloor}
+    onPhase={next=>{setSimulationStep(null);choosePhase(next)}} onLayer={chooseLayer} onSimulation={startSimulation}/>
   const info=showTimeline&&frame&&eventAnchor?
     <aside className="scene-event" data-anchor={eventAnchor} aria-label="Événement sur la maquette"
       style={cue&&layer?{'--tone':routeStyle(layer,cue.route).color} as CSSProperties:undefined}>
@@ -177,14 +169,15 @@ export default function App(){
         legend={{hover:legendHover,pinned:legendPin,onHover:setLegendHover,onPin:setLegendPin}}/>:null
   return <>
     <a href="#main-content" className="skip-link">Aller au contenu</a>
-    <main className="board-app" id="main-content" aria-label="Visite de la maquette">
+    <main className="board-app" id="main-content" aria-labelledby="project-title">
+      <h1 className="visually-hidden" id="project-title">Centre de données de Benguerir</h1>
       <Stage cap={cap} inputs={inputs} phase={phase} scale={scale} floor={floor} target={target} layer={layer} action={command}
-        header={header} info={info} menu={menu} onMenu={setMenu}
+        toolbar={toolbar} info={info} menu={menu} onMenu={setMenu}
         routes={activeRoutes} emphasis={emphasis} hour={sceneHour} focus={focus}
         trace={simulationStep&&cue?{route:cue.route,sequence:simulationStep.sequence}:null}
         anchor={showTimeline?eventAnchor:null}
         labels={labels} isolated={isolated} walk={walk} economy={economy} tool={tool}
-        onSelect={chooseTarget}
+        onLocation={()=>goScale(scale==='city'?'site':'city')} onSelect={chooseTarget}
         onZoom={direction=>{camera('zoom',direction)}} onReset={()=>{reset()}}
         onLabels={()=>setLabels(!labels)} onWalk={()=>{setSimulationStep(null);setLayer(null);reset('ground');setWalk(true)}} onWalkExit={()=>setWalk(false)}
         onQuality={()=>setEconomy(!economy)} onFullscreen={fullscreen} onHelp={()=>help.current?.showModal()}>

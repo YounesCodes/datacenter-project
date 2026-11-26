@@ -1,5 +1,5 @@
 import { lazy,Suspense,useEffect,useLayoutEffect,useRef,useState,type CSSProperties,type ReactNode } from 'react'
-import { ArrowUpRight, Box, Check, ChevronDown, Hand, Layers3, LocateFixed, Map, MapPin, Maximize, Minus, MousePointer2, Play, Plus, Settings, Video, X, Zap } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Box, Check, ChevronDown, ChevronRight, Hand, Layers3, LocateFixed, Map, MapPin, Maximize, Minus, MousePointer2, Play, Plus, Settings, Video, X, Zap } from 'lucide-react'
 import { layers } from './content'
 import { phases,property,type Floor,type Layer,type Phase,type WalkZone } from './model'
 import type { SceneState } from './sceneRuntime'
@@ -9,6 +9,8 @@ import { layerIcons,nameFor } from './Inspector'
 
 const Scene=lazy(()=>import('./Scene'))
 const MapView=lazy(()=>import('./MapView'))
+const coordinateFormat=new Intl.NumberFormat('fr-FR',{minimumFractionDigits:5,maximumFractionDigits:5})
+const siteCoordinates=property.parcelAnchor?.map(value=>coordinateFormat.format(value)+'°').join(' · ')
 export type Tool='select'|'pan'
 export type BoardMenu='camera'|'floors'|'layers'|'simulations'|'phases'|null
 type MenuProps={menu:BoardMenu;onMenu:(menu:BoardMenu)=>void}
@@ -102,8 +104,8 @@ export function BoardTools({tool,floor,phase,layer,simulation,menu,onMenu,onTool
 }
 
 type StageProps=SceneState&MenuProps&{
-  scale:Scale;action:CameraAction;header:ReactNode;info:ReactNode;children:ReactNode;
-  onSelect:(id:string)=>void;onZoom:(direction:'in'|'out')=>void;
+  scale:Scale;action:CameraAction;toolbar:ReactNode;info:ReactNode;children:ReactNode;
+  onLocation:()=>void;onSelect:(id:string)=>void;onZoom:(direction:'in'|'out')=>void;
   onReset:()=>void;onLabels:()=>void;onWalk:()=>void;onWalkExit:()=>void;onQuality:()=>void;onFullscreen:()=>void;onHelp:()=>void;
 }
 export function Stage(props:StageProps){
@@ -122,7 +124,7 @@ export function Stage(props:StageProps){
       </div>
     </div>
     <div className="board-hud">
-      <div className="board-top">{props.header}</div>
+      {props.toolbar&&<div className="board-top">{props.toolbar}</div>}
       <div className="board-main">
         {(mapOpened||!ground)&&<div className="map-surface" data-inactive={ground} aria-hidden={ground}>
           <Suspense fallback={<div className="scene-loading"><Map size={26}/><span>Ouverture de la carte…</span></div>}>
@@ -142,7 +144,16 @@ export function Stage(props:StageProps){
           </div>
           <p className="walk-keys">ZQSD ou flèches pour marcher. <span>Souris pour regarder · E pour ouvrir · Échap pour sortir.</span></p>
         </div>}
-        {ground&&!walk&&property.parcelAnchor&&<div className="geo-pin"><MapPin size={13}/><span>{property.parcelAnchor[0].toFixed(5)}°, {property.parcelAnchor[1].toFixed(5)}°</span></div>}
+        <nav className="location-dock" aria-label="Navigation principale">
+          <button className="location-button" aria-labelledby="location-label" aria-describedby={siteCoordinates?'site-coordinates':undefined} onClick={props.onLocation}>
+            <span className="location-button-icon">{ground?<MapPin size={17} aria-hidden="true"/>:<ArrowLeft size={17} aria-hidden="true"/>}</span>
+            <span className="location-button-copy">
+              <strong id="location-label">{ground?'Localisation':'Retour à la maquette'}</strong>
+              {siteCoordinates&&<span id="site-coordinates">{siteCoordinates}</span>}
+            </span>
+            {ground&&<ChevronRight className="location-button-chevron" size={15} aria-hidden="true"/>}
+          </button>
+        </nav>
       </div>
       {ground&&<div className="camera-dock">
         {settings&&!walk&&<div className="camera-options" id="board-camera-options" data-board-menu>

@@ -279,7 +279,7 @@ export function createScene(host:HTMLDivElement,labelHost:HTMLDivElement,eventHo
     const compact=width<500,clearance=compact?19:24
     const showLabels=state?.labels&&!state.walk&&!state.anchor
     const covers=showLabels&&hud?Array.from(hud.querySelectorAll(
-      '.board-title, .board-actions, .board-tools, .inspector, .camera-options, .stage-toolbar, .board-bottom',
+      '.board-tools, .inspector, .camera-options, .stage-toolbar, .board-bottom > *',
     ),node=>node.getBoundingClientRect()).filter(rect=>rect.width>0&&rect.height>0):[]
     for(const element of labelHost.querySelectorAll<HTMLButtonElement>('[data-marker]')){
       const id=element.dataset.marker!

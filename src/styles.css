@@ -78,7 +78,7 @@ h1{font-size:clamp(27px,3.3vw,43px);line-height:1.13;font-weight:670;letter-spac
 .stage-head{top:12px}
 .stage-bottom{align-items:flex-end;bottom:12px}
 .stage-head>*,.stage-bottom>*{pointer-events:auto}
-.crumb,.stage-floors,.geo-pin,.orientation,.stage-toolbar,.camera-options,.floor-caption,.active-route{border:1px solid #d2ded0;background:#fbfcf8;box-shadow:0 2px 6px #35493611}
+.crumb,.stage-floors,.orientation,.stage-toolbar,.camera-options,.floor-caption,.active-route{border:1px solid #d2ded0;background:#fbfcf8;box-shadow:0 2px 6px #35493611}
 .crumb{max-width:calc(100% - 54px);padding:7px 9px;min-height:34px;display:flex;align-items:center;gap:5px;border-radius:7px;font-size:10px;color:#536c5d}
 .crumb>svg{flex-shrink:0}
 .crumb>svg:first-child{color:#407b5a}
@@ -102,8 +102,6 @@ h1{font-size:clamp(27px,3.3vw,43px);line-height:1.13;font-weight:670;letter-spac
 .camera-options button{display:flex;align-items:center;justify-content:space-between;gap:6px;outline-offset:0;width:100%;padding:6px;border:0;background:transparent;border-radius:4px;text-align:left;font-size:11px}
 .camera-options button:hover,.camera-options button[aria-pressed=true]{background:#ebf2e8;color:var(--accent)}
 .camera-options button span{font-size:9px;color:#607a67}
-.geo-pin{display:flex;align-items:center;gap:5px;padding:6px 8px;border-radius:5px;font-size:9px;line-height:1.3;color:#52685a}
-.geo-pin svg{flex-shrink:0;color:#668474}
 .orientation{width:35px;height:43px;border-radius:7px;color:#3b6851;display:grid;place-content:center;justify-items:center;gap:0;padding:3px}
 .orientation span{font-size:8px;font-weight:850}
 .orientation svg{transform:rotate(-23deg)}

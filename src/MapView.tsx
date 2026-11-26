@@ -15,7 +15,6 @@ const mapPadding={paddingTopLeft:[38,70] as L.PointTuple,paddingBottomRight:[38,
 const osmAttribution='© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">Contributeurs OpenStreetMap</a>'
 const satelliteAttribution='© <a href="https://www.maptiler.com/copyright/" target="_blank" rel="noreferrer">MapTiler</a> · '+osmAttribution
 const validBoundary=parcelVerified?property.cadastralBoundary:null
-const coordinates=new Intl.NumberFormat('fr-FR',{minimumFractionDigits:5,maximumFractionDigits:5})
 
 function radiusMarker(location:L.LatLngExpression,title:string,fillColor:string){
   return L.circleMarker(location,{radius:7,weight:2,color:'#fff',fillColor,fillOpacity:1})
@@ -87,19 +86,16 @@ export default function MapView({active}:{active:boolean}){
   function toggleSatellite(){
     setSatelliteError(false);setMapError(false);setSatellite(value=>!value)
   }
-  const coordinatesLabel=property.parcelAnchor?.map(value=>coordinates.format(value)).join(' / ')
   return <div className="geography">
     <div className="map-host" ref={host} role="region" aria-label="Carte interactive de Benguerir" />
     {mapKey&&<div className="map-actions"><button className="soft-button" aria-pressed={satellite} onClick={toggleSatellite}>{satellite?'Plan de ville':'Satellite'}</button></div>}
-    <div className="map-footnote">
+    {(satellite||mapError||satelliteError)&&<div className="map-footnote">
       {satellite&&<a className="maptiler-logo" href="https://www.maptiler.com/" target="_blank" rel="noreferrer">
         <img src="https://api.maptiler.com/resources/logo.svg" alt="MapTiler" />
       </a>}
-      <div className="geo-notice">
-        {mapError&&<span role="status">Fond de carte indisponible. Les repères restent visibles. </span>}
-        {satelliteError&&!mapError&&<span role="status">Fond satellite indisponible. Le plan de ville est affiché. </span>}
-        {coordinatesLabel&&<span>{coordinatesLabel}</span>}
-      </div>
-    </div>
+      {(mapError||satelliteError)&&<div className="geo-notice" role="status">
+        {mapError?'Fond de carte indisponible. Les repères restent visibles.':'Fond satellite indisponible. Le plan de ville est affiché.'}
+      </div>}
+    </div>}
   </div>
 }
